@@ -18,12 +18,19 @@ class VLCPlayer:
             "--ts-seek-percent", "--sout-ts-shaping=1"
         )
         self.player = self.instance.media_player_new()
-        self.width = 640  # Temporary placeholder
-        self.height = 480  # Temporary placeholder
+        self.width, self.height = self.detect_stream_resolution()
         self.frame_data = np.zeros((self.height, self.width, 4), dtype=np.uint8)
         self.frame_pointer = self.frame_data.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8))
         self.setup_vlc()
         self.set_media(url)
+
+    def detect_stream_resolution(self):
+        tracks = self.media.get_tracks_info()
+        for track in tracks:
+            if track['type'] == vlc.TrackType.Video:
+                return track['video']['width'], track['video']['height']
+        print("Error fetching resolution of stream")
+        return 640, 480  # Fallback resolution
 
     def setup_vlc(self):
         self.lock_cb = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))(self.lock_cb)
@@ -110,5 +117,5 @@ def main():
 
 if __name__ == "__main__":
     os.environ["DISPLAY"] = ':0'
-    os.system("unclutter -idle 0 &")
+    # os.system("unclutter -idle 0 &")
     main()
