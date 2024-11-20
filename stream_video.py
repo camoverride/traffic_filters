@@ -11,10 +11,8 @@ class VLCPlayer:
         self.url = url
         self.width, self.height = 640, 480  # Default resolution
         self.instance = vlc.Instance(
-            "--no-audio", "--no-xlib",
-            "--network-caching=5000", "--file-caching=8000",
-            "--avcodec-hw=mmal",  # Enable hardware acceleration on Pi
-            "--verbose=2", "--logfile=vlc_log.txt"
+            "--no-audio", "--no-xlib", "--file-caching=8000", "--network-caching=8000",
+            "--avcodec-hw=none", "--verbose=2", "--logfile=vlc_log.txt"
         )
         self.player = self.instance.media_player_new()
         self.frame_data = np.zeros((self.height, self.width, 4), dtype=np.uint8)
@@ -54,6 +52,7 @@ class VLCPlayer:
 
 def main():
     url = "https://61e0c5d388c2e.streamlock.net/live/2_Lenora_NS.stream/chunklist_w165176739.m3u8"
+    retry_delay = 5  # Seconds to wait before restarting after an error
 
     while True:
         player = None
@@ -66,12 +65,14 @@ def main():
             cv2.namedWindow("Video Stream", cv2.WINDOW_NORMAL)
             cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
+            consecutive_failures = 0
+
             while True:
                 try:
                     # Process and display video frame
                     frame = player.get_frame()
                     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_RGBA2RGB)
-                    frame_resized = cv2.resize(frame_rgb, (1024, 768))  # Use default resizing
+                    frame_resized = cv2.resize(frame_rgb, (1024, 768))  # Scale if needed
                     cv2.imshow("Video Stream", frame_resized)
 
                     # Exit on 'q' key press
@@ -81,19 +82,22 @@ def main():
 
                 except Exception as frame_error:
                     print(f"Frame processing error: {frame_error}")
-                    print("Restarting player due to decoder error...")
-                    break  # Break out of inner loop to restart the player
+                    consecutive_failures += 1
+                    if consecutive_failures >= 5:
+                        print("Too many consecutive frame errors. Restarting player...")
+                        break
+                    time.sleep(1)
 
         except Exception as e:
             print(f"Player initialization error: {e}")
-            time.sleep(5)  # Wait before retrying
+            print("Restarting in 5 seconds...")
+            time.sleep(retry_delay)
 
         finally:
             if player:
                 player.stop()
             cv2.destroyAllWindows()  # Clean up OpenCV resources
-            print("Player stopped. Retrying in 5 seconds...")
-            time.sleep(5)  # Delay before restarting the loop
+            print("Player stopped. Restarting loop...")
 
 
 if __name__ == "__main__":
