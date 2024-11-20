@@ -9,9 +9,12 @@ import time
 class VLCPlayer:
     def __init__(self, url):
         self.url = url
-        self.width, self.height = 640, 480  # Fallback resolution
+        self.width, self.height = 640, 480  # Default resolution
         self.instance = vlc.Instance(
-            "--no-audio", "--no-xlib", "--network-caching=3000", "--file-caching=3000"
+            "--no-audio", "--no-xlib",
+            "--network-caching=5000", "--file-caching=8000",
+            "--avcodec-hw=mmal",  # Enable hardware acceleration on Pi
+            "--verbose=2", "--logfile=vlc_log.txt"
         )
         self.player = self.instance.media_player_new()
         self.frame_data = np.zeros((self.height, self.width, 4), dtype=np.uint8)
@@ -22,7 +25,6 @@ class VLCPlayer:
         self.lock_cb = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))(self.lock_cb)
         self.unlock_cb = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))(self.unlock_cb)
         self.display_cb = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p)(self.display_cb)
-
         self.player.video_set_callbacks(self.lock_cb, self.unlock_cb, self.display_cb, None)
         self.player.video_set_format("RV32", self.width, self.height, self.width * 4)
 
@@ -54,42 +56,44 @@ def main():
     url = "https://61e0c5d388c2e.streamlock.net/live/2_Lenora_NS.stream/chunklist_w165176739.m3u8"
 
     while True:
+        player = None
         try:
-            print("Starting VLC player...")
+            print("Initializing VLC player...")
             player = VLCPlayer(url)
             player.start()
-            # Configure OpenCV window for fullscreen
+
+            # Configure OpenCV window
             cv2.namedWindow("Video Stream", cv2.WINDOW_NORMAL)
             cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
             while True:
                 try:
-                    # Get frame and convert it for display
+                    # Process and display video frame
                     frame = player.get_frame()
                     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_RGBA2RGB)
-                    frame_resized = cv2.resize(frame_rgb, (1024, 768))  # Default to simple resizing
+                    frame_resized = cv2.resize(frame_rgb, (1024, 768))  # Use default resizing
                     cv2.imshow("Video Stream", frame_resized)
 
                     # Exit on 'q' key press
                     if cv2.waitKey(1) & 0xFF == ord('q'):
                         print("Exiting on user request.")
-                        player.stop()
-                        cv2.destroyAllWindows()
                         return
 
-                except Exception as e:
-                    print(f"Error processing frame: {e}")
-                    break  # Restart player on frame processing error
+                except Exception as frame_error:
+                    print(f"Frame processing error: {frame_error}")
+                    print("Restarting player due to decoder error...")
+                    break  # Break out of inner loop to restart the player
 
         except Exception as e:
-            print(f"Error initializing VLC: {e}")
+            print(f"Player initialization error: {e}")
             time.sleep(5)  # Wait before retrying
+
         finally:
-            try:
+            if player:
                 player.stop()
-            except Exception:
-                pass
-            cv2.destroyAllWindows()  # Ensure OpenCV resources are released
+            cv2.destroyAllWindows()  # Clean up OpenCV resources
+            print("Player stopped. Retrying in 5 seconds...")
+            time.sleep(5)  # Delay before restarting the loop
 
 
 if __name__ == "__main__":
