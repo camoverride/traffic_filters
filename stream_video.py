@@ -14,7 +14,7 @@ class VLCPlayer:
         self.instance = vlc.Instance(
             "--no-audio", "--no-xlib", "--video-title-show",
             "--no-video-title", "--avcodec-hw=none",
-            "--network-caching=5000", "--clock-synchro=0", "--file-caching=5000",
+            "--network-caching=10000", "--clock-synchro=0", "--file-caching=10000",
             "--ts-seek-percent", "--sout-ts-shaping=1"
         )
         self.player = self.instance.media_player_new()
