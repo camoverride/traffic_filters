@@ -4,7 +4,11 @@ import numpy as np
 import cv2
 import ctypes
 import time
+import logging
 
+# Setup logging
+logging.basicConfig(level=logging.DEBUG, filename="stream_log.log", filemode="a",
+                    format="%(asctime)s - %(levelname)s - %(message)s")
 
 class VLCPlayer:
     def __init__(self, url):
@@ -53,19 +57,20 @@ class VLCPlayer:
 def main():
     url = "https://61e0c5d388c2e.streamlock.net/live/2_Lenora_NS.stream/chunklist_w165176739.m3u8"
     retry_delay = 5  # Seconds to wait before restarting after an error
+    max_retries = 5  # Maximum retries before exiting
 
     while True:
         player = None
+        retry_count = 0
+
         try:
-            print("Initializing VLC player...")
+            logging.info("Initializing VLC player...")
             player = VLCPlayer(url)
             player.start()
 
             # Configure OpenCV window
             cv2.namedWindow("Video Stream", cv2.WINDOW_NORMAL)
             cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-
-            consecutive_failures = 0
 
             while True:
                 try:
@@ -77,28 +82,27 @@ def main():
 
                     # Exit on 'q' key press
                     if cv2.waitKey(1) & 0xFF == ord('q'):
-                        print("Exiting on user request.")
+                        logging.info("Exiting on user request.")
                         return
 
                 except Exception as frame_error:
-                    print(f"Frame processing error: {frame_error}")
-                    consecutive_failures += 1
-                    if consecutive_failures >= 5:
-                        print("Too many consecutive frame errors. Restarting player...")
+                    logging.warning(f"Frame processing error: {frame_error}")
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        logging.error("Too many consecutive frame errors. Restarting player...")
                         break
                     time.sleep(1)
 
         except Exception as e:
-            print(f"Player initialization error: {e}")
-            print("Restarting in 5 seconds...")
+            logging.error(f"Player initialization error: {e}")
+            logging.info("Restarting in 5 seconds...")
             time.sleep(retry_delay)
 
         finally:
             if player:
                 player.stop()
             cv2.destroyAllWindows()  # Clean up OpenCV resources
-            print("Player stopped. Restarting loop...")
-
+            logging.info("Player stopped. Restarting loop...")
 
 if __name__ == "__main__":
     os.environ["DISPLAY"] = ":0"
