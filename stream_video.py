@@ -15,7 +15,7 @@ class VLCPlayer:
             "--no-audio", "--no-xlib", "--video-title-show",
             "--no-video-title", "--avcodec-hw=none",
             "--network-caching=3000", "--clock-synchro=0", "--file-caching=3000",
-            "--ts-seek-percent", "--sout-ts-shaping=1"
+            "--ts-seek-percent", "--sout-ts-shaping=1", "--verbose=2", "--logfile=vlc_log.txt"
         )
         self.player = self.instance.media_player_new()
         self.width, self.height = self.detect_stream_resolution()
@@ -64,52 +64,56 @@ class VLCPlayer:
 
 
 def main():
-    # notify(Notification.READY)  # Notify systemd that the service has started
     url = "https://61e0c5d388c2e.streamlock.net/live/2_Lenora_NS.stream/chunklist_w165176739.m3u8"
-
+    
     while True:
+        player = None
         try:
+            # Create and start the VLC player instance
             player = VLCPlayer(url)
             player.start()
 
+            # Configure the OpenCV display window
             cv2.namedWindow("Video Stream", cv2.WND_PROP_FULLSCREEN)
             cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
+            # Fetch monitor dimensions
             monitor = get_monitors()[0]
             screen_width = monitor.width
             screen_height = monitor.height
 
-            consecutive_failures = 0  # Count consecutive failures
+            # Initialize failure counter
+            consecutive_failures = 0
 
-            while True:
+            while consecutive_failures < 5:  # Allow up to 5 consecutive failures
                 try:
-                    # Attempt to get and display a frame
+                    # Get and process the frame
                     frame = player.get_frame()
                     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_RGBA2RGB)
                     frame_rgb = cv2.resize(frame_rgb, (screen_width, screen_height))
                     cv2.imshow("Video Stream", frame_rgb)
 
-                    # Reset failure counter on success and notify the watchdog
+                    # Reset failure counter on success
                     consecutive_failures = 0
-                    # notify(Notification.WATCHDOG)
 
                     # Exit on 'q' key press
                     if cv2.waitKey(1) & 0xFF == ord('q'):
-                        break
-
-                except Exception as e:
-                    print(f"Stream processing error: {e}")
-                    consecutive_failures += 1
-
-                    # Stop sending watchdog notifications after 5 consecutive failures
-                    if consecutive_failures > 5:
-                        print("Too many VLC failures. Stopping watchdog notifications.")
+                        print("Exiting on user request.")
                         return
 
-        except Exception as e:
-            print(f"Outer loop error occurred: {e}")
+                except Exception as frame_error:
+                    print(f"Stream processing error: {frame_error}")
+                    consecutive_failures += 1
+                    time.sleep(1)  # Small delay before retrying
+
+            print("Too many consecutive frame failures. Restarting VLC instance.")
+
+        except Exception as outer_error:
+            print(f"Outer loop error occurred: {outer_error}")
             time.sleep(10)  # Delay before retrying
+
         finally:
+            # Ensure resources are cleaned up
             if player:
                 player.stop()
             cv2.destroyAllWindows()
