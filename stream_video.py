@@ -58,13 +58,16 @@ def main():
             print("Starting VLC player...")
             player = VLCPlayer(url)
             player.start()
+            # Configure OpenCV window for fullscreen
+            cv2.namedWindow("Video Stream", cv2.WINDOW_NORMAL)
+            cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
             while True:
                 try:
                     # Get frame and convert it for display
                     frame = player.get_frame()
                     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_RGBA2RGB)
-                    frame_resized = cv2.resize(frame_rgb, (640, 480))  # Default to simple resizing
+                    frame_resized = cv2.resize(frame_rgb, (1024, 768))  # Default to simple resizing
                     cv2.imshow("Video Stream", frame_resized)
 
                     # Exit on 'q' key press
