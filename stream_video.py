@@ -12,7 +12,7 @@ class VLCPlayer:
         self.width, self.height = 640, 480  # Default resolution
         self.instance = vlc.Instance(
             "--no-audio", "--no-xlib", "--file-caching=8000", "--network-caching=8000",
-            "--avcodec-hw=none", "--verbose=2", "--logfile=vlc_log.txt"
+            "--avcodec-hw=none", "--verbose=1", "--logfile=vlc_log.txt"
         )
         self.player = self.instance.media_player_new()
         self.frame_data = np.zeros((self.height, self.width, 4), dtype=np.uint8)
