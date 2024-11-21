@@ -4,18 +4,21 @@ import numpy as np
 import cv2
 import ctypes
 import time
+import hashlib
 import logging
+
 
 # Setup logging
 logging.basicConfig(level=logging.DEBUG, filename="stream_log.log", filemode="a",
                     format="%(asctime)s - %(levelname)s - %(message)s")
+
 
 class VLCPlayer:
     def __init__(self, url):
         self.url = url
         self.width, self.height = 640, 480  # Default resolution
         self.instance = vlc.Instance(
-            "--no-audio", "--no-xlib", "--file-caching=8000", "--network-caching=8000",
+            "--no-audio", "--no-xlib", "--file-caching=3000", "--network-caching=3000",
             "--avcodec-hw=none", "--verbose=1", "--logfile=vlc_log.txt"
         )
         self.player = self.instance.media_player_new()
@@ -54,14 +57,19 @@ class VLCPlayer:
         return np.copy(self.frame_data)
 
 
+def compute_frame_hash(frame):
+    """Compute a simple hash for the frame."""
+    return hashlib.sha256(frame.tobytes()).hexdigest()
+
+
 def main():
     url = "https://61e0c5d388c2e.streamlock.net/live/2_Lenora_NS.stream/chunklist_w165176739.m3u8"
     retry_delay = 5  # Seconds to wait before restarting after an error
-    max_retries = 5  # Maximum retries before exiting
 
     while True:
         player = None
-        retry_count = 0
+        last_hash = None
+        last_update_time = time.time()
 
         try:
             logging.info("Initializing VLC player...")
@@ -73,36 +81,36 @@ def main():
             cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
             while True:
-                try:
-                    # Process and display video frame
-                    frame = player.get_frame()
-                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_RGBA2RGB)
-                    frame_resized = cv2.resize(frame_rgb, (1024, 768))  # Scale if needed
-                    cv2.imshow("Video Stream", frame_resized)
+                frame = player.get_frame()
+                frame_hash = compute_frame_hash(frame)
 
-                    # Exit on 'q' key press
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        logging.info("Exiting on user request.")
-                        return
+                # Check if frame hash changes
+                if frame_hash != last_hash:
+                    last_hash = frame_hash
+                    last_update_time = time.time()
+                elif time.time() - last_update_time > 10:  # 10-second timeout
+                    logging.warning("Stream frozen. Restarting...")
+                    break
 
-                except Exception as frame_error:
-                    logging.warning(f"Frame processing error: {frame_error}")
-                    retry_count += 1
-                    if retry_count >= max_retries:
-                        logging.error("Too many consecutive frame errors. Restarting player...")
-                        break
-                    time.sleep(1)
+                # Process and display video frame
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_RGBA2RGB)
+                frame_resized = cv2.resize(frame_rgb, (1024, 768))
+                cv2.imshow("Video Stream", frame_resized)
+
+                # Exit on 'q' key press
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    logging.info("Exiting on user request.")
+                    return
 
         except Exception as e:
-            logging.error(f"Player initialization error: {e}")
-            logging.info("Restarting in 5 seconds...")
+            logging.error(f"Error: {e}. Restarting in {retry_delay} seconds...")
             time.sleep(retry_delay)
 
         finally:
             if player:
                 player.stop()
             cv2.destroyAllWindows()  # Clean up OpenCV resources
-            logging.info("Player stopped. Restarting loop...")
+            logging.info("Restarting player...")
 
 if __name__ == "__main__":
     os.environ["DISPLAY"] = ":0"
