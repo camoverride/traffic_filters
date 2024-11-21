@@ -6,6 +6,8 @@ import ctypes
 import time
 import hashlib
 import logging
+from filters import *
+
 
 
 # Setup logging
@@ -95,6 +97,7 @@ def main():
                 # Process and display video frame
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_RGBA2RGB)
                 frame_resized = cv2.resize(frame_rgb, (1024, 768))
+                frame_resized = posterize_filter(frame_resized)
                 cv2.imshow("Video Stream", frame_resized)
 
                 # Exit on 'q' key press
