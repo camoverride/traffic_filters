@@ -66,7 +66,6 @@ def compute_frame_hash(frame):
 
 def main():
     url = "https://61e0c5d388c2e.streamlock.net/live/2_Lenora_NS.stream/chunklist_w165176739.m3u8"
-    url = "https://61e0c5d388c2e.streamlock.net/live/2_Virginia_NS.stream/chunklist_w155634764.m3u8"
     retry_delay = 5  # Seconds to wait before restarting after an error
 
     while True:
@@ -79,11 +78,12 @@ def main():
             player = VLCPlayer(url)
             player.start()
 
-            # Configure OpenCV window
-            cv2.namedWindow("Video Stream", cv2.WINDOW_NORMAL)
-            cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-
             while True:
+                # Recreate and configure the OpenCV window in every iteration
+                # Ensures fullscreen is applied after every restart
+                cv2.namedWindow("Video Stream", cv2.WINDOW_NORMAL)
+                cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
                 frame = player.get_frame()
                 frame_hash = compute_frame_hash(frame)
 
@@ -101,9 +101,6 @@ def main():
                 frame_resized = thermal_filter(frame_resized)
                 cv2.imshow("Video Stream", frame_resized)
 
-                # Ensure fullscreen stays enabled
-                cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-
                 # Exit on 'q' key press
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     logging.info("Exiting on user request.")
@@ -116,7 +113,8 @@ def main():
         finally:
             if player:
                 player.stop()
-            cv2.destroyAllWindows()  # Clean up OpenCV resources
+            # Explicitly destroy all OpenCV windows
+            cv2.destroyAllWindows()
             logging.info("Restarting player...")
 
 if __name__ == "__main__":
