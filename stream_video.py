@@ -21,15 +21,12 @@ class VLCPlayer:
         self.width, self.height = 1024, 768  # resolution of monitor
         self.instance = vlc.Instance(
             "--no-audio", "--no-xlib", "--file-caching=5000", "--network-caching=5000",
-            "--avcodec-hw=any", "--verbose=1", "--logfile=vlc_log.txt"
+            "--avcodec-hw=any", "--rtsp-tcp", "--verbose=1", "--logfile=vlc_log.txt"
         )
         self.player = self.instance.media_player_new()
         self.frame_data = np.zeros((self.height, self.width, 4), dtype=np.uint8)
         self.frame_pointer = self.frame_data.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8))
         self.setup_vlc()
-
-        # Set fullscreen
-        self.player.set_fullscreen(True)
 
     def setup_vlc(self):
         self.lock_cb = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))(self.lock_cb)
@@ -93,10 +90,11 @@ def main():
                 if frame_hash != last_hash:
                     last_hash = frame_hash
                     last_update_time = time.time()
-                if time.time() - last_update_time > 10 or player.player.get_state() != vlc.State.Playing:
-                    logging.warning("Stream frozen or player stopped. Restarting...")
+                elif time.time() - last_update_time > 10:  # 10-second timeout
                     player.stop()
-                    raise Exception("Stream frozen or player stopped.")
+                    print("Stream frozen. Restarting... (1)")
+                    logging.warning("Stream frozen. Restarting... (2)")
+                    break
 
                 # Process and display video frame
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_RGBA2RGB)
