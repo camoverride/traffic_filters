@@ -100,6 +100,9 @@ def main():
                 frame_resized = thermal_filter(frame_resized)
                 cv2.imshow("Video Stream", frame_resized)
 
+                # Ensure fullscreen stays enabled
+                cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
                 # Exit on 'q' key press
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     logging.info("Exiting on user request.")
