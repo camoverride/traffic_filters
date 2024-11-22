@@ -91,9 +91,7 @@ def main():
                     last_hash = frame_hash
                     last_update_time = time.time()
                 elif time.time() - last_update_time > 10:  # 10-second timeout
-                    player.stop()
-                    print("Stream frozen. Restarting... (1)")
-                    logging.warning("Stream frozen. Restarting... (2)")
+                    logging.warning("Stream frozen. Restarting...")
                     break
 
                 # Process and display video frame
