@@ -28,6 +28,9 @@ class VLCPlayer:
         self.frame_pointer = self.frame_data.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8))
         self.setup_vlc()
 
+        # Set fullscreen
+        self.player.set_fullscreen(True)
+
     def setup_vlc(self):
         self.lock_cb = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))(self.lock_cb)
         self.unlock_cb = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))(self.unlock_cb)
