@@ -7,7 +7,12 @@ import time
 import hashlib
 import logging
 from filters import *
+import yaml
 
+
+
+with open("config.yaml", "r") as file:
+    config = yaml.safe_load(file)
 
 
 # Setup logging
@@ -97,7 +102,7 @@ def main():
 
                 # Process and display video frame
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_RGBA2RGB)
-                frame_resized = cv2.resize(frame_rgb, (1024, 768))
+                frame_resized = cv2.resize(frame_rgb, (config["display_width"], config["display_height"]))
                 frame_resized = thermal_filter(frame_resized)
                 cv2.imshow("Video Stream", frame_resized)
 
