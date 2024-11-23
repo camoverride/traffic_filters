@@ -1,2 +1,6 @@
+# Dimensions of the monitor or projector output. `fbset`
 display_width: 1024
 display_height: 768
+
+# URL of the traffic camera.
+traffic_cam_url: https://61e0c5d388c2e.streamlock.net/live/2_Lenora_NS.stream/chunklist_w165176739.m3u8

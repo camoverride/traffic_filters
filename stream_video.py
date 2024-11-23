@@ -70,7 +70,7 @@ def compute_frame_hash(frame):
 
 
 def main():
-    url = "https://61e0c5d388c2e.streamlock.net/live/2_Lenora_NS.stream/chunklist_w165176739.m3u8"
+    url = config["traffic_cam_url"]
     retry_delay = 5  # Seconds to wait before restarting after an error
 
     while True:
