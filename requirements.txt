@@ -4,3 +4,4 @@ opencv-python==4.10.0.84
 python-vlc==3.0.21203
 screeninfo==0.8.1
 PyYAML==6.0.2
+sdnotify==0.3.2
