@@ -11,6 +11,7 @@ import yaml
 from sdnotify import SystemdNotifier
 
 
+
 with open("config.yaml", "r") as file:
     config = yaml.safe_load(file)
 
@@ -85,19 +86,18 @@ def main():
             player.start()
 
             while True:
-                # Recreate and configure the OpenCV window in every iteration
-                # Ensures fullscreen is applied after every restart
                 cv2.namedWindow("Video Stream", cv2.WINDOW_NORMAL)
                 cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
                 frame = player.get_frame()
                 frame_hash = compute_frame_hash(frame)
 
-                # Check if frame hash changes
+                # Send watchdog notification if frame hash changes
                 if frame_hash != last_hash:
                     last_hash = frame_hash
                     last_update_time = time.time()
-                elif time.time() - last_update_time > 10:  # 10-second timeout
+                    notifier.notify("WATCHDOG=1")
+                elif time.time() - last_update_time > 300:  # 5-minute timeout
                     logging.warning("Stream frozen. Restarting...")
                     break
 
@@ -119,10 +119,11 @@ def main():
         finally:
             if player:
                 player.stop()
-            # Explicitly destroy all OpenCV windows
             cv2.destroyAllWindows()
             logging.info("Restarting player...")
 
+
 if __name__ == "__main__":
     os.environ["DISPLAY"] = ":0"
+    os.system("unclutter -idle 0 &")
     main()
