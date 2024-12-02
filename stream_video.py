@@ -96,7 +96,6 @@ def main():
                 if frame_hash != last_hash:
                     last_hash = frame_hash
                     last_update_time = time.time()
-                    notifier.notify("WATCHDOG=1")
                 elif time.time() - last_update_time > 300:  # 5-minute timeout
                     logging.warning("Stream frozen. Restarting...")
                     break
@@ -106,6 +105,7 @@ def main():
                 frame_resized = cv2.resize(frame_rgb, (config["display_width"], config["display_height"]))
                 frame_resized = thermal_filter(frame_resized)
                 cv2.imshow("Video Stream", frame_resized)
+                notifier.notify("WATCHDOG=1")
 
                 # Exit on 'q' key press
                 if cv2.waitKey(1) & 0xFF == ord('q'):
