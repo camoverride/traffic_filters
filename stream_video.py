@@ -8,7 +8,7 @@ import hashlib
 import logging
 from filters import *
 import yaml
-
+from sdnotify import SystemdNotifier
 
 
 with open("config.yaml", "r") as file:
@@ -72,6 +72,7 @@ def compute_frame_hash(frame):
 def main():
     url = config["traffic_cam_url"]
     retry_delay = 5  # Seconds to wait before restarting after an error
+    notifier = SystemdNotifier()
 
     while True:
         player = None
