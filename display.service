@@ -3,7 +3,7 @@ Description=Display surveillance cameras
 After=default.target
 
 [Service]
-Type=notify
+Type=simple
 NotifyAccess=all
 Restart=always
 RestartSec=10
