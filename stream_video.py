@@ -10,21 +10,18 @@ from filters import *
 import yaml
 from sdnotify import SystemdNotifier
 
-
-
+# Load configuration
 with open("config.yaml", "r") as file:
     config = yaml.safe_load(file)
 
-
 # Setup logging
-logging.basicConfig(level=logging.DEBUG, filename="st m_log.log", filemode="a",
+logging.basicConfig(level=logging.DEBUG, filename="stream_log.log", filemode="a",
                     format="%(asctime)s - %(levelname)s - %(message)s")
-
 
 class VLCPlayer:
     def __init__(self, url):
         self.url = url
-        self.width, self.height = 1024, 768  # resolution of stream
+        self.width, self.height = config["display_width"], config["display_height"]  # Use display resolution
         self.instance = vlc.Instance(
             "--no-audio", "--no-xlib", "--file-caching=5000", "--network-caching=5000",
             "--avcodec-hw=any", "--fullscreen", "--verbose=1", "--logfile=vlc_log.txt"
@@ -64,11 +61,9 @@ class VLCPlayer:
     def get_frame(self):
         return np.copy(self.frame_data)
 
-
 def compute_frame_hash(frame):
     """Compute a simple hash for the frame."""
     return hashlib.sha256(frame.tobytes()).hexdigest()
-
 
 def main():
     url = config["traffic_cam_url"]
@@ -84,11 +79,13 @@ def main():
             logging.info("Initializing VLC player...")
             player = VLCPlayer(url)
             player.start()
+            time.sleep(5)  # Wait for VLC to initialize
+
+            # Create OpenCV window in fullscreen mode
+            cv2.namedWindow("Video Stream", cv2.WINDOW_NORMAL)
+            cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
             while True:
-                cv2.namedWindow("Video Stream", cv2.WINDOW_NORMAL)
-                cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-
                 frame = player.get_frame()
                 frame_hash = compute_frame_hash(frame)
 
@@ -96,16 +93,14 @@ def main():
                 if frame_hash != last_hash:
                     last_hash = frame_hash
                     last_update_time = time.time()
+                    notifier.notify("WATCHDOG=1")  # Reset watchdog timer
                 elif time.time() - last_update_time > 300:  # 5-minute timeout
                     logging.warning("Stream frozen. Restarting...")
                     break
 
                 # Process and display video frame
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_RGBA2RGB)
-                frame_resized = cv2.resize(frame_rgb, (config["display_width"], config["display_height"]))
-                frame_resized = thermal_filter(frame_resized)
-                cv2.imshow("Video Stream", frame_resized)
-                notifier.notify("WATCHDOG=1")
+                cv2.imshow("Video Stream", frame_rgb)
 
                 # Exit on 'q' key press
                 if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -121,7 +116,6 @@ def main():
                 player.stop()
             cv2.destroyAllWindows()
             logging.info("Restarting player...")
-
 
 if __name__ == "__main__":
     os.environ["DISPLAY"] = ":0"
