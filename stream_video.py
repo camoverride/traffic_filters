@@ -17,14 +17,14 @@ with open("config.yaml", "r") as file:
 
 
 # Setup logging
-logging.basicConfig(level=logging.DEBUG, filename="stream_log.log", filemode="a",
+logging.basicConfig(level=logging.DEBUG, filename="st m_log.log", filemode="a",
                     format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 class VLCPlayer:
     def __init__(self, url):
         self.url = url
-        self.width, self.height = 1024, 768  # resolution of monitor
+        self.width, self.height = config["display_width"], config["display_height"]  # Use display resolution from config
         self.instance = vlc.Instance(
             "--no-audio", "--no-xlib", "--file-caching=5000", "--network-caching=5000",
             "--avcodec-hw=any", "--fullscreen", "--verbose=1", "--logfile=vlc_log.txt"
@@ -102,9 +102,10 @@ def main():
 
                 # Process and display video frame
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_RGBA2RGB)
-                frame_resized = cv2.resize(frame_rgb, (config["display_width"], config["display_height"]))
-                frame_resized = thermal_filter(frame_resized)
-                cv2.imshow("Video Stream", frame_resized)
+                # frame_resized = cv2.resize(frame_rgb, (config["display_width"], config["display_height"]))
+                # frame_resized = thermal_filter(frame_resized)
+                frame_thermal = thermal_filter(frame_rgb)
+                cv2.imshow("Video Stream", frame_thermal)
                 notifier.notify("WATCHDOG=1")
 
                 # Exit on 'q' key press
