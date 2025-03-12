@@ -9,6 +9,7 @@ import logging
 from filters import *
 import yaml
 from sdnotify import SystemdNotifier
+import subprocess
 
 # Load configuration
 with open("config.yaml", "r") as file:
@@ -65,6 +66,18 @@ def compute_frame_hash(frame):
     """Compute a simple hash for the frame."""
     return hashlib.sha256(frame.tobytes()).hexdigest()
 
+def force_fullscreen(window_name):
+    """Force the OpenCV window into fullscreen mode using xdotool."""
+    try:
+        # Find the window ID of the OpenCV window
+        window_id = subprocess.check_output(["xdotool", "search", "--name", window_name]).decode().strip()
+        # Force the window into fullscreen mode
+        subprocess.run(["xdotool", "windowactivate", "--sync", window_id])
+        subprocess.run(["xdotool", "windowsize", window_id, "100%", "100%"])
+        subprocess.run(["xdotool", "windowmove", window_id, "0", "0"])
+    except Exception as e:
+        logging.error(f"Failed to force fullscreen: {e}")
+
 def main():
     url = config["traffic_cam_url"]
     retry_delay = 5  # Seconds to wait before restarting after an error
@@ -81,9 +94,10 @@ def main():
             player.start()
             time.sleep(5)  # Wait for VLC to initialize
 
-            # Create OpenCV window in fullscreen mode
+            # Create OpenCV window
             cv2.namedWindow("Video Stream", cv2.WINDOW_NORMAL)
             cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+            force_fullscreen("Video Stream")  # Force fullscreen using xdotool
 
             while True:
                 frame = player.get_frame()
