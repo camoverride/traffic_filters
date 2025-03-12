@@ -3,12 +3,15 @@
 
 ## Setup
 
-git clone
-
+- `git clone git@github.com:camoverride/traffic_filters.git`
+- `cd traffic_filters`
 - `python3 -m venv .venv`
 - `source .venv/bin/activate`
 - `pip install -r requirements.txt`
 - `sudo apt-get install unclutter`
+
+Add the dimensions of your monitor to `config.yaml` and optionally
+select a new traffic camera.
 
 
 ## Run

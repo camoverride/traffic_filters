@@ -1,28 +1,28 @@
+import ctypes
+import hashlib
+import logging
 import os
+import sys
+
 import vlc
 import numpy as np
 import cv2
-import ctypes
-import time
-import hashlib
-import logging
-from filters import *
 import yaml
 from sdnotify import SystemdNotifier
-import subprocess
 
-# Load configuration
-with open("config.yaml", "r") as file:
-    config = yaml.safe_load(file)
+from filters import thermal_filter
+
+
 
 # Setup logging
-logging.basicConfig(level=logging.DEBUG, filename="stream_log.log", filemode="a",
+logging.basicConfig(level=logging.DEBUG, filename="st m_log.log", filemode="a",
                     format="%(asctime)s - %(levelname)s - %(message)s")
+
 
 class VLCPlayer:
     def __init__(self, url):
         self.url = url
-        self.width, self.height = config["display_width"], config["display_height"]  # Use display resolution
+        self.width, self.height = 1024, 768  # resolution of stream
         self.instance = vlc.Instance(
             "--no-audio", "--no-xlib", "--file-caching=5000", "--network-caching=5000",
             "--avcodec-hw=any", "--fullscreen", "--verbose=1", "--logfile=vlc_log.txt"
@@ -62,76 +62,87 @@ class VLCPlayer:
     def get_frame(self):
         return np.copy(self.frame_data)
 
-def compute_frame_hash(frame):
-    """Compute a simple hash for the frame."""
+
+def get_frame_hash(frame):
+    """
+    Compute a simple hash for the frame.
+    """
     return hashlib.sha256(frame.tobytes()).hexdigest()
 
-def force_fullscreen(window_name):
-    """Force the OpenCV window into fullscreen mode using xdotool."""
-    try:
-        # Find the window ID of the OpenCV window
-        window_id = subprocess.check_output(["xdotool", "search", "--name", window_name]).decode().strip()
-        # Force the window into fullscreen mode
-        subprocess.run(["xdotool", "windowactivate", "--sync", window_id])
-        subprocess.run(["xdotool", "windowsize", window_id, "100%", "100%"])
-        subprocess.run(["xdotool", "windowmove", window_id, "0", "0"])
-    except Exception as e:
-        logging.error(f"Failed to force fullscreen: {e}")
 
-def main():
-    url = config["traffic_cam_url"]
-    retry_delay = 5  # Seconds to wait before restarting after an error
-    notifier = SystemdNotifier()
-
-    while True:
-        player = None
-        last_hash = None
-        last_update_time = time.time()
-
-        try:
-            logging.info("Initializing VLC player...")
-            player = VLCPlayer(url)
-            player.start()
-            time.sleep(5)  # Wait for VLC to initialize
-
-            # Create OpenCV window
-            cv2.namedWindow("Video Stream", cv2.WINDOW_NORMAL)
-            cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-            force_fullscreen("Video Stream")  # Force fullscreen using xdotool
-
-            while True:
-                frame = player.get_frame()
-                frame_hash = compute_frame_hash(frame)
-
-                # Send watchdog notification if frame hash changes
-                if frame_hash != last_hash:
-                    last_hash = frame_hash
-                    last_update_time = time.time()
-                    notifier.notify("WATCHDOG=1")  # Reset watchdog timer
-                elif time.time() - last_update_time > 300:  # 5-minute timeout
-                    logging.warning("Stream frozen. Restarting...")
-                    break
-
-                # Process and display video frame
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_RGBA2RGB)
-                cv2.imshow("Video Stream", frame_rgb)
-
-                # Exit on 'q' key press
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    logging.info("Exiting on user request.")
-                    return
-
-        except Exception as e:
-            logging.error(f"Error: {e}. Restarting in {retry_delay} seconds...")
-            time.sleep(retry_delay)
-
-        finally:
-            if player:
-                player.stop()
-            cv2.destroyAllWindows()
-            logging.info("Restarting player...")
 
 if __name__ == "__main__":
+    """"
+    TODO: this script should be solid. However, these are two potential errors:
+
+    1) Frames are output by VLC `player.get_frame()` but slowly - not so
+        slow that the watchdog gets triggered, but slow enough that the
+        experience is bad.
+    2) Frames are output by VLC and are different, but not noticably so.
+        For instance, if VLC glitches and produces random noise, then
+        the hash will change and the watchdog will think that video is
+        streaming, but it's just noise.
+    """
+
+    # Load the config.
+    with open("config.yaml", "r") as file:
+        config = yaml.safe_load(file)
+
+    # Set the display.
     os.environ["DISPLAY"] = ":0"
+
+    # Remove mouse (for Raspberry Pi)
     os.system("unclutter -idle 0 &")
-    main()
+
+    # URL of the traffic camera, taken from SDOT website's HTML
+    url = config["traffic_cam_url"]
+
+    # Watchdog to check if frozen.
+    notifier = SystemdNotifier()
+
+    # Set up the VLC player for getting video off the internet.
+    logging.info("Initializing VLC player...")
+    player = VLCPlayer(url)
+    player.start()
+
+    # Set up the cv2 display window.
+    cv2.namedWindow("Video Stream", cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
+    # Set up frame hashing to track whether the stream is frozen.
+    current_frame_hash = None
+    frame = player.get_frame()
+    previous_frame_hash = get_frame_hash(frame)
+
+
+    # Main event loop.
+    while True:
+        # Get the frame.
+        frame = player.get_frame()
+
+        # Process the video frame.
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_RGBA2RGB)
+        frame_resized = cv2.resize(frame_rgb,
+                                    (config["display_width"],
+                                    config["display_height"]))
+        filtered_image = thermal_filter(frame_resized)
+
+        # Hash the frame to track if it has changed.
+        current_frame_hash = get_frame_hash(frame)
+
+        # Display the processed frame if it has changed.
+        if current_frame_hash != previous_frame_hash:
+            cv2.imshow("Video Stream", filtered_image)
+
+            # Notify the watchdog.
+            notifier.notify("WATCHDOG=1")
+
+            # Update the previous frame hash.
+            previous_frame_hash = current_frame_hash
+
+        # Exit on "q" key press
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            logging.info("Exiting on user request.")
+            player.stop()
+            cv2.destroyAllWindows()
+            sys.exit(0)
