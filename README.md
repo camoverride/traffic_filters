@@ -1,4 +1,7 @@
-# Traffic Filters
+# Traffic Filters 👀
+
+Display filtered video streams from Seattle Department of Transit (SDOT) cameras.
+[link](https://web.seattle.gov/Travelers/)
 
 
 ## Setup
