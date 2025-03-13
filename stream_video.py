@@ -106,8 +106,8 @@ if __name__ == "__main__":
     player.start()
 
     # Set up the cv2 display window.
-    cv2.namedWindow("Video Stream", cv2.WINDOW_NORMAL)
-    cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    cv2.namedWindow("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
+    cv2.waitKey(1)
 
     # Set up frame hashing to track whether the stream is frozen.
     current_frame_hash = None
