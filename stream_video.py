@@ -110,7 +110,9 @@ if __name__ == "__main__":
     cv2.namedWindow("Video Stream", cv2.WINDOW_FREERATIO)
     cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     cv2.waitKey(1)
-    os.system("wmctrl -r 'Video Stream' -b add,fullscreen")
+    # os.system("wmctrl -r 'Video Stream' -b add,fullscreen")
+    import time
+    os.system("sleep 1 && xdotool search --onlyvisible --name 'Video Stream' windowsize 100% 100%")
 
     # Set up frame hashing to track whether the stream is frozen.
     current_frame_hash = None
