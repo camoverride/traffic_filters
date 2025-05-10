@@ -20,30 +20,26 @@ logging.basicConfig(level=logging.DEBUG, filename="st_m_log.log", filemode="a",
 class VLCPlayer:
     def __init__(self, url, width=1024, height=768):
         self.url = url
-        self.width, self.height = width, height
+        # Swap width/height if your stream is portrait
+        self.width, self.height = height, width  # Key change here
+        
         self.frame_ready = False
+        self.frame_data = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+        self.frame_pointer = self.frame_data.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8))
 
-        # VLC options with software decoding
+        # Updated VLC options
         vlc_options = [
             "--no-audio",
-            "--avcodec-hw=none",  # Force software decoding
+            "--avcodec-hw=none",
             "--file-caching=5000",
             "--network-caching=5000",
-            "--verbose=2",
-            "--logfile=vlc_log.txt",
-            "--no-osd",
-            "--swscale-mode=4",  # Better quality software scaling
-            "--drop-late-frames",
-            "--skip-frames"
+            "--no-video-title-show",
+            "--video-filter=transform{type=90}",  # Force rotation if needed
+            "--vout=opengl"  # More reliable output
         ]
 
         self.instance = vlc.Instance(vlc_options)
         self.player = self.instance.media_player_new()
-        
-        # Initialize frame buffer
-        self.frame_data = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-        self.frame_pointer = self.frame_data.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8))
-        
         self.setup_vlc()
 
     def setup_vlc(self):
