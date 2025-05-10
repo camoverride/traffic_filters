@@ -6,23 +6,20 @@ import sys
 
 import vlc
 import numpy as np
-import cv2
 import yaml
+import pygame
 from sdnotify import SystemdNotifier
 
 from filters import thermal_filter
 
-
-
 # Setup logging
-logging.basicConfig(level=logging.DEBUG, filename="st m_log.log", filemode="a",
+logging.basicConfig(level=logging.DEBUG, filename="st_m_log.log", filemode="a",
                     format="%(asctime)s - %(levelname)s - %(message)s")
-
 
 class VLCPlayer:
     def __init__(self, url):
         self.url = url
-        self.width, self.height = 1024, 768  # resolution of stream
+        self.width, self.height = 1024, 768
         self.instance = vlc.Instance(
             "--no-audio", "--no-xlib", "--file-caching=5000", "--network-caching=5000",
             "--avcodec-hw=any", "--fullscreen", "--verbose=1", "--logfile=vlc_log.txt"
@@ -64,86 +61,54 @@ class VLCPlayer:
 
 
 def get_frame_hash(frame):
-    """
-    Compute a simple hash for the frame.
-    """
     return hashlib.sha256(frame.tobytes()).hexdigest()
 
 
-
 if __name__ == "__main__":
-    """"
-    TODO: this script should be solid. However, these are two potential errors:
-
-    1) Frames are output by VLC `player.get_frame()` but slowly - not so
-        slow that the watchdog gets triggered, but slow enough that the
-        experience is bad.
-    2) Frames are output by VLC and are different, but not noticably so.
-        For instance, if VLC glitches and produces random noise, then
-        the hash will change and the watchdog will think that video is
-        streaming, but it's just noise.
-    """
-
-    # Load the config.
     with open("config.yaml", "r") as file:
         config = yaml.safe_load(file)
 
-    # Set the display.
+    # Make sure the X display is set (important if using SSH)
     os.environ["DISPLAY"] = ":0"
 
-    # Remove mouse (for Raspberry Pi)
+    # Remove mouse cursor
     os.system("unclutter -idle 0 &")
 
-    # URL of the traffic camera, taken from SDOT website's HTML
-    url = config["traffic_cam_url"]
-
-    # Watchdog to check if frozen.
+    # Start systemd watchdog
     notifier = SystemdNotifier()
 
-    # Set up the VLC player for getting video off the internet.
+    url = config["traffic_cam_url"]
+
     logging.info("Initializing VLC player...")
     player = VLCPlayer(url)
     player.start()
 
-    # Set up the cv2 display window.
-    cv2.namedWindow("Video Stream", cv2.WINDOW_NORMAL)
-    cv2.setWindowProperty("Video Stream", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-    # os.system("sleep 1 && xdotool search --onlyvisible --name 'Video Stream' windowsize 100% 100%")
+    pygame.init()
+    screen = pygame.display.set_mode((config["display_width"], config["display_height"]), pygame.FULLSCREEN)
+    pygame.mouse.set_visible(False)
+    clock = pygame.time.Clock()
 
-    # Set up frame hashing to track whether the stream is frozen.
-    current_frame_hash = None
-    frame = player.get_frame()
-    previous_frame_hash = get_frame_hash(frame)
+    previous_frame_hash = get_frame_hash(player.get_frame())
 
-
-    # Main event loop.
     while True:
-        # Get the frame.
         frame = player.get_frame()
-
-        # Process the video frame.
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_RGBA2RGB)
-        frame_resized = cv2.resize(frame_rgb,
-                                    (config["display_width"],
-                                    config["display_height"]))
+        frame_rgb = frame[:, :, :3]  # Strip alpha
+        frame_resized = cv2.resize(frame_rgb, (config["display_width"], config["display_height"]))
         filtered_image = thermal_filter(frame_resized)
+        current_frame_hash = get_frame_hash(filtered_image)
 
-        # Hash the frame to track if it has changed.
-        current_frame_hash = get_frame_hash(frame)
+        for event in pygame.event.get():
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_q:
+                logging.info("Exiting on user request.")
+                player.stop()
+                pygame.quit()
+                sys.exit(0)
 
-        # Display the processed frame if it has changed.
         if current_frame_hash != previous_frame_hash:
-            cv2.imshow("Video Stream", filtered_image)
-
-            # Notify the watchdog.
+            frame_surface = pygame.surfarray.make_surface(np.rot90(filtered_image))
+            screen.blit(frame_surface, (0, 0))
+            pygame.display.flip()
             notifier.notify("WATCHDOG=1")
-
-            # Update the previous frame hash.
             previous_frame_hash = current_frame_hash
 
-        # Exit on "q" key press
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            logging.info("Exiting on user request.")
-            player.stop()
-            cv2.destroyAllWindows()
-            sys.exit(0)
+        clock.tick(30)  # Limit FPS to reduce CPU load
