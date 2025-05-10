@@ -15,28 +15,33 @@ from filters import thermal_filter
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, filename="st_m_log.log", filemode="a",
-                    format="%(asctime)s - %(levelname)s - %(message)s")
+                   format="%(asctime)s - %(levelname)s - %(message)s")
 
 class VLCPlayer:
     def __init__(self, url, width=1024, height=768):
         self.url = url
         self.width, self.height = width, height
+        self.frame_ready = False
 
-        # VLC options - disable hardware acceleration and use software decoding
+        # VLC options with software decoding
         vlc_options = [
             "--no-audio",
-            "--avcodec-hw=none",  # Disable hardware acceleration
+            "--avcodec-hw=none",  # Force software decoding
             "--file-caching=5000",
             "--network-caching=5000",
-            "--verbose=1",
+            "--verbose=2",
             "--logfile=vlc_log.txt",
             "--no-osd",
-            "--swscale-mode=4"  # Better quality software scaling
+            "--swscale-mode=4",  # Better quality software scaling
+            "--drop-late-frames",
+            "--skip-frames"
         ]
 
         self.instance = vlc.Instance(vlc_options)
         self.player = self.instance.media_player_new()
-        self.frame_data = np.zeros((self.height, self.width, 4), dtype=np.uint8)
+        
+        # Initialize frame buffer
+        self.frame_data = np.zeros((self.height, self.width, 3), dtype=np.uint8)
         self.frame_pointer = self.frame_data.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8))
         
         self.setup_vlc()
@@ -48,13 +53,15 @@ class VLCPlayer:
         self.display_cb = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p)(self.display)
         
         self.player.video_set_callbacks(self.lock_cb, self.unlock_cb, self.display_cb, None)
-        self.player.video_set_format("RGBA", self.width, self.height, self.width * 4)
+        self.player.video_set_format("RV24", self.width, self.height, self.width * 3)  # RGB24 format
 
     def lock(self, opaque, planes):
         planes[0] = ctypes.cast(self.frame_pointer, ctypes.c_void_p)
+        return None
 
     def unlock(self, opaque, picture, planes):
-        pass
+        self.frame_ready = True
+        return None
 
     def display(self, opaque, picture):
         pass
@@ -68,12 +75,16 @@ class VLCPlayer:
 
     def start(self):
         self.set_media()
-        self.player.play()
+        if self.player.play() == -1:
+            logging.error("Failed to play media")
+            return False
+        return True
 
     def stop(self):
         self.player.stop()
 
     def get_frame(self):
+        self.frame_ready = False
         return np.copy(self.frame_data)
 
 def get_frame_hash(frame):
@@ -99,11 +110,13 @@ if __name__ == "__main__":
     # Initialize VLC player
     logging.info("Initializing VLC player...")
     player = VLCPlayer(url, width=display_width, height=display_height)
-    player.start()
+    if not player.start():
+        sys.exit(1)
 
     current_frame_hash = None
     previous_frame_hash = None
     running = True
+    frame_counter = 0
 
     try:
         while running:
@@ -111,27 +124,38 @@ if __name__ == "__main__":
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
                     running = False
 
-            frame = player.get_frame()
-            frame_rgb = frame[:, :, :3]  # Remove alpha channel
-            
-            try:
-                filtered_image = thermal_filter(frame_rgb)
-                pygame.surfarray.blit_array(screen, filtered_image)
-                pygame.display.flip()
-            except Exception as e:
-                logging.error(f"Frame processing error: {str(e)}")
-                continue
-
-            current_frame_hash = get_frame_hash(filtered_image)
-            if current_frame_hash != previous_frame_hash:
-                logging.info(f"Frame hash changed: {current_frame_hash[:16]}...")
-                notifier.notify("WATCHDOG=1")
-                previous_frame_hash = current_frame_hash
+            # Only process if we have a new frame
+            if player.frame_ready:
+                frame = player.get_frame()
+                
+                try:
+                    # Convert BGR to RGB if needed (OpenCV style)
+                    frame_rgb = frame[:, :, ::-1] if frame.shape[2] == 3 else frame
+                    filtered_image = thermal_filter(frame_rgb)
+                    
+                    # Convert to pygame surface and display
+                    surf = pygame.surfarray.make_surface(filtered_image)
+                    screen.blit(surf, (0, 0))
+                    pygame.display.flip()
+                    
+                    # Log frame info periodically
+                    frame_counter += 1
+                    if frame_counter % 30 == 0:
+                        logging.debug(f"Displaying frame {frame_counter}")
+                        current_frame_hash = get_frame_hash(filtered_image)
+                        if current_frame_hash != previous_frame_hash:
+                            logging.info(f"Frame changed: {current_frame_hash[:16]}...")
+                            notifier.notify("WATCHDOG=1")
+                            previous_frame_hash = current_frame_hash
+                except Exception as e:
+                    logging.error(f"Frame processing error: {str(e)}")
 
             clock.tick(30)  # Limit to 30 FPS
 
     except KeyboardInterrupt:
         logging.info("Received keyboard interrupt")
+    except Exception as e:
+        logging.error(f"Unexpected error: {str(e)}")
     finally:
         player.stop()
         pygame.quit()
