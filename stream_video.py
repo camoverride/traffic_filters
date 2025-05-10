@@ -34,7 +34,7 @@ class VLCPlayer:
             "--file-caching=5000",
             "--network-caching=5000",
             "--no-video-title-show",
-            "--video-filter=transform{type=90}",  # Force rotation if needed
+            "--video-filter=transform{type=0}",  # Force rotation if needed
             "--vout=opengl"  # More reliable output
         ]
 
