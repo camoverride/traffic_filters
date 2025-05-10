@@ -3,6 +3,7 @@ import hashlib
 import logging
 import os
 import sys
+import time
 
 import vlc
 import numpy as np
@@ -12,9 +13,10 @@ from sdnotify import SystemdNotifier
 
 from filters import thermal_filter
 
-# Setup logging
+
 logging.basicConfig(level=logging.DEBUG, filename="st_m_log.log", filemode="a",
                     format="%(asctime)s - %(levelname)s - %(message)s")
+
 
 class VLCPlayer:
     def __init__(self, url):
@@ -22,7 +24,7 @@ class VLCPlayer:
         self.width, self.height = 1024, 768
         self.instance = vlc.Instance(
             "--no-audio", "--no-xlib", "--file-caching=5000", "--network-caching=5000",
-            "--avcodec-hw=any", "--fullscreen", "--verbose=1", "--logfile=vlc_log.txt"
+            "--avcodec-hw=any", "--verbose=1", "--logfile=vlc_log.txt"
         )
         self.player = self.instance.media_player_new()
         self.frame_data = np.zeros((self.height, self.width, 4), dtype=np.uint8)
@@ -65,38 +67,31 @@ def get_frame_hash(frame):
 
 
 if __name__ == "__main__":
+    # Load the config
     with open("config.yaml", "r") as file:
         config = yaml.safe_load(file)
 
-    # Make sure the X display is set (important if using SSH)
-    os.environ["DISPLAY"] = ":0"
+    url = config["traffic_cam_url"]
+    display_width = config["display_width"]
+    display_height = config["display_height"]
 
-    # Remove mouse cursor
-    os.system("unclutter -idle 0 &")
-
-    # Start systemd watchdog
     notifier = SystemdNotifier()
 
-    url = config["traffic_cam_url"]
-
+    # Start VLC
     logging.info("Initializing VLC player...")
     player = VLCPlayer(url)
     player.start()
 
+    # Initialize Pygame for full-screen display
+    os.environ["SDL_VIDEODRIVER"] = "fbcon"  # For direct framebuffer access
     pygame.init()
-    screen = pygame.display.set_mode((config["display_width"], config["display_height"]), pygame.FULLSCREEN)
+    screen = pygame.display.set_mode((display_width, display_height), pygame.FULLSCREEN)
     pygame.mouse.set_visible(False)
-    clock = pygame.time.Clock()
 
-    previous_frame_hash = get_frame_hash(player.get_frame())
+    current_frame_hash = None
+    previous_frame_hash = None
 
     while True:
-        frame = player.get_frame()
-        frame_rgb = frame[:, :, :3]  # Strip alpha
-        frame_resized = cv2.resize(frame_rgb, (config["display_width"], config["display_height"]))
-        filtered_image = thermal_filter(frame_resized)
-        current_frame_hash = get_frame_hash(filtered_image)
-
         for event in pygame.event.get():
             if event.type == pygame.KEYDOWN and event.key == pygame.K_q:
                 logging.info("Exiting on user request.")
@@ -104,11 +99,20 @@ if __name__ == "__main__":
                 pygame.quit()
                 sys.exit(0)
 
+        # Get and process the frame
+        frame = player.get_frame()
+        frame_rgb = frame[:, :, :3]
+        frame_resized = np.array(pygame.transform.smoothscale(
+            pygame.surfarray.make_surface(np.rot90(frame_rgb)), (display_width, display_height)
+        ))
+        filtered_image = thermal_filter(frame_resized)
+        current_frame_hash = get_frame_hash(filtered_image)
+
         if current_frame_hash != previous_frame_hash:
-            frame_surface = pygame.surfarray.make_surface(np.rot90(filtered_image))
-            screen.blit(frame_surface, (0, 0))
+            surface = pygame.surfarray.make_surface(np.rot90(filtered_image))
+            screen.blit(pygame.transform.scale(surface, (display_width, display_height)), (0, 0))
             pygame.display.flip()
             notifier.notify("WATCHDOG=1")
             previous_frame_hash = current_frame_hash
 
-        clock.tick(30)  # Limit FPS to reduce CPU load
+        time.sleep(0.01)  # Light throttle
