@@ -7,12 +7,11 @@ import time
 
 import vlc
 import numpy as np
-import yaml
 import pygame
+import yaml
 from sdnotify import SystemdNotifier
 
 from filters import thermal_filter
-
 
 logging.basicConfig(level=logging.DEBUG, filename="st_m_log.log", filemode="a",
                     format="%(asctime)s - %(levelname)s - %(message)s")
@@ -82,11 +81,8 @@ if __name__ == "__main__":
     player = VLCPlayer(url)
     player.start()
 
-    # Initialize Pygame for full-screen display
-    os.environ["SDL_VIDEODRIVER"] = "fbcon"  # For direct framebuffer access
+    # Initialize Pygame (needed for surfarray)
     pygame.init()
-    screen = pygame.display.set_mode((display_width, display_height), pygame.FULLSCREEN)
-    pygame.mouse.set_visible(False)
 
     current_frame_hash = None
     previous_frame_hash = None
@@ -102,16 +98,12 @@ if __name__ == "__main__":
         # Get and process the frame
         frame = player.get_frame()
         frame_rgb = frame[:, :, :3]
-        frame_resized = np.array(pygame.transform.smoothscale(
-            pygame.surfarray.make_surface(np.rot90(frame_rgb)), (display_width, display_height)
-        ))
-        filtered_image = thermal_filter(frame_resized)
+        filtered_image = thermal_filter(frame_rgb)
+
         current_frame_hash = get_frame_hash(filtered_image)
 
         if current_frame_hash != previous_frame_hash:
-            surface = pygame.surfarray.make_surface(np.rot90(filtered_image))
-            screen.blit(pygame.transform.scale(surface, (display_width, display_height)), (0, 0))
-            pygame.display.flip()
+            logging.info(f"Frame hash changed: {current_frame_hash}")
             notifier.notify("WATCHDOG=1")
             previous_frame_hash = current_frame_hash
 
