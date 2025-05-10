@@ -18,50 +18,65 @@ logging.basicConfig(level=logging.DEBUG, filename="st_m_log.log", filemode="a",
 
 
 class VLCPlayer:
-    def __init__(self, url):
+    def __init__(self, url, width=1024, height=768):
         self.url = url
-        self.width, self.height = 1024, 768
+        self.width, self.height = width, height
+
+        # Initialize VLC instance with headless options (no display, no audio, and caching)
         self.instance = vlc.Instance(
             "--no-audio", "--no-xlib", "--file-caching=5000", "--network-caching=5000",
             "--verbose=1", "--logfile=vlc_log.txt")
 
+        # Create a media player instance
         self.player = self.instance.media_player_new()
         self.frame_data = np.zeros((self.height, self.width, 4), dtype=np.uint8)
         self.frame_pointer = self.frame_data.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8))
+        
         self.setup_vlc()
 
     def setup_vlc(self):
+        # Set callbacks for the frame extraction and video display
         self.lock_cb = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))(self.lock_cb)
         self.unlock_cb = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))(self.unlock_cb)
         self.display_cb = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p)(self.display_cb)
+        
+        # Configure VLC for video frame extraction without display
         self.player.video_set_callbacks(self.lock_cb, self.unlock_cb, self.display_cb, None)
         self.player.video_set_format("RV32", self.width, self.height, self.width * 4)
 
     def set_media(self):
+        # Load the video stream into VLC
         media = self.instance.media_new(self.url)
         self.player.set_media(media)
 
     def lock_cb(self, opaque, planes):
+        # Lock callback: Provide the frame data pointer
         planes[0] = ctypes.cast(self.frame_pointer, ctypes.c_void_p)
 
     def unlock_cb(self, opaque, picture, planes):
+        # Unlock callback: No-op for this case
         pass
 
     def display_cb(self, opaque, picture):
+        # Display callback: No-op for this case
         pass
 
     def start(self):
+        # Initialize media and start playing
         self.set_media()
         self.player.play()
 
     def stop(self):
+        # Stop the player
         self.player.stop()
 
     def get_frame(self):
+        # Return a copy of the current frame
         return np.copy(self.frame_data)
 
 
 def get_frame_hash(frame):
+    # Generate SHA256 hash for frame comparison
     return hashlib.sha256(frame.tobytes()).hexdigest()
 
 
@@ -78,7 +93,7 @@ if __name__ == "__main__":
 
     # Start VLC
     logging.info("Initializing VLC player...")
-    player = VLCPlayer(url)
+    player = VLCPlayer(url, width=display_width, height=display_height)
     player.start()
 
     # Initialize Pygame (needed for surfarray)
@@ -97,14 +112,16 @@ if __name__ == "__main__":
 
         # Get and process the frame
         frame = player.get_frame()
-        frame_rgb = frame[:, :, :3]
-        filtered_image = thermal_filter(frame_rgb)
+        frame_rgb = frame[:, :, :3]  # Only take RGB channels (no alpha)
+        filtered_image = thermal_filter(frame_rgb)  # Apply your filter here
 
+        # Hash the current filtered image
         current_frame_hash = get_frame_hash(filtered_image)
 
+        # Only perform logging and notify if the frame has changed
         if current_frame_hash != previous_frame_hash:
             logging.info(f"Frame hash changed: {current_frame_hash}")
-            notifier.notify("WATCHDOG=1")
+            notifier.notify("WATCHDOG=1")  # Systemd notification
             previous_frame_hash = current_frame_hash
 
-        time.sleep(0.01)  # Light throttle
+        time.sleep(0.01)  # Light throttle to reduce CPU load
