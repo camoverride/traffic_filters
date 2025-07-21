@@ -26,7 +26,8 @@ class StableVLCPlayer:
             "--skip-frames",
             "--no-video-title-show",
             "--vout=dummy",  # Headless rendering
-            "--verbose=0"  # Reduce logging
+            "--verbose=0",  # Reduce logging
+            "--video-filter=transform{type=90}"
         ]
 
         self.instance = vlc.Instance(vlc_options)
