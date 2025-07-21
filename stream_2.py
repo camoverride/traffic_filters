@@ -12,6 +12,7 @@ except ImportError:
 
 def set_vlc_window(player, window_id):
     system = platform.system()
+    print(f"OS: {system}, VLC window id: {window_id}")
     if system == "Windows":
         player.set_hwnd(window_id)
     elif system == "Linux":
@@ -38,7 +39,31 @@ if __name__ == "__main__":
         sys.exit(1)
 
     window = sdl2.Window.from_display_module()
-    window_id = window.window  # <--- use .window attribute
+    print("Window object attributes:", dir(window))
+
+    # Try these in order to get a valid window ID:
+    window_id = None
+    for candidate in ["get_handle", "get_window_id", "windowid", "handle"]:
+        if hasattr(window, candidate):
+            attr = getattr(window, candidate)
+            if callable(attr):
+                window_id = attr()
+            else:
+                window_id = attr
+            print(f"Got window_id from {candidate}: {window_id}")
+            break
+
+    # If still None, try int cast
+    if window_id is None:
+        try:
+            window_id = int(window)
+            print(f"Got window_id from int(window): {window_id}")
+        except Exception as e:
+            print(f"Failed to get window_id from int(window): {e}")
+
+    if window_id is None:
+        print("Could not get native window handle. Exiting.")
+        sys.exit(1)
 
     instance = vlc.Instance("--no-audio", "--no-video-title-show")
     player = instance.media_player_new()
