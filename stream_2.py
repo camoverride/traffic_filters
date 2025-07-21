@@ -4,6 +4,12 @@ import pygame
 import yaml
 import platform
 
+try:
+    import pygame._sdl2 as sdl2
+except ImportError:
+    sdl2 = None
+    print("pygame._sdl2 module not found. Cannot get native window handle.")
+
 def set_vlc_window(player, window_id):
     system = platform.system()
     if system == "Windows":
@@ -27,12 +33,17 @@ if __name__ == "__main__":
     screen = pygame.display.set_mode((width, height))
     pygame.display.set_caption("Video Stream")
 
+    if sdl2 is None:
+        print("Error: Cannot embed VLC video without native window handle. Exiting.")
+        sys.exit(1)
+
+    window = sdl2.Window.from_display_module()
+    window_id = window.get_handle()
+
     instance = vlc.Instance("--no-audio", "--no-video-title-show")
     player = instance.media_player_new()
     media = instance.media_new(url)
     player.set_media(media)
-
-    window_id = pygame.display.get_window_id()
 
     set_vlc_window(player, window_id)
 
