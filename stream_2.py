@@ -38,7 +38,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     window = sdl2.Window.from_display_module()
-    window_id = window.get_handle()
+    window_id = window.window  # <--- use .window attribute
 
     instance = vlc.Instance("--no-audio", "--no-video-title-show")
     player = instance.media_player_new()
