@@ -1,17 +1,15 @@
 import ctypes
 import hashlib
 import logging
-import os
 import sys
-import time
-
 import vlc
 import numpy as np
 import pygame
 import yaml
 from sdnotify import SystemdNotifier
-
 from filters import thermal_filter
+
+
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, filename="st_m_log.log", filemode="a",
@@ -83,8 +81,11 @@ class VLCPlayer:
         self.frame_ready = False
         return np.copy(self.frame_data)
 
+
 def get_frame_hash(frame):
     return hashlib.sha256(frame.tobytes()).hexdigest()
+
+
 
 if __name__ == "__main__":
     # Load config
