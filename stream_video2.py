@@ -6,6 +6,9 @@ import vlc
 import numpy as np
 import pygame
 import threading
+import cv2
+
+
 
 class StableVLCPlayer:
     def __init__(self, url, width=1024, height=768):
@@ -94,7 +97,7 @@ def main():
             # Process frames
             if player.frame_ready:
                 with player.frame_lock:
-                    frame = player.frame.copy()[:, :, ::-1]  # BGR to RGB
+                    frame = cv2.cvtColor(player.frame.copy(), cv2.COLOR_BGR2RGB)  # BGR to RGB
                     player.frame_ready = False
 
                 surf = pygame.surfarray.make_surface(frame)
