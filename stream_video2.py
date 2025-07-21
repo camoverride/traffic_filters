@@ -70,7 +70,7 @@ def main():
     screen = pygame.display.set_mode((1024, 768))
     clock = pygame.time.Clock()
 
-    player = StableVLCPlayer("http://your_stream_url")
+    player = StableVLCPlayer("https://61e0c5d388c2e.streamlock.net/live/3_Stewart_NS.stream/chunklist_w1559207018.m3u8")
     if not player.start():
         sys.exit(1)
 
