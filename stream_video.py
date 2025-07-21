@@ -39,7 +39,7 @@ class VLCPlayer:
         ]
 
         self.instance = vlc.Instance(vlc_options)
-        self.player = self.instance.media_player_new()
+        self.player = self.instance.media_player_new() # type: ignore
         self.setup_vlc()
 
     def setup_vlc(self):
@@ -63,7 +63,7 @@ class VLCPlayer:
         pass
 
     def set_media(self):
-        media = self.instance.media_new(self.url)
+        media = self.instance.media_new(self.url) # type: ignore
         media.add_option(f":width={self.width}")
         media.add_option(f":height={self.height}")
         media.add_option(":codec=avcodec-hw=none")
