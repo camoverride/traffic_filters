@@ -79,7 +79,7 @@ class StreamPlayer:
 
 def main():
     # Configuration (could load from YAML if needed)
-    STREAM_URL = "http://example.com/stream.m3u8"  # Replace with your URL
+    STREAM_URL = "https://61e0c5d388c2e.streamlock.net/live/3_Stewart_NS.stream/chunklist_w1559207018.m3u8"  # Replace with your URL
     WINDOW_SIZE = (1024, 768)
     
     # Initialize pygame
