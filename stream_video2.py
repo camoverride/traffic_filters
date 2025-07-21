@@ -28,6 +28,8 @@ class StableVLCPlayer:
             "--vout=dummy",  # Headless rendering
             "--verbose=0",  # Reduce logging
             "--video-filter=transform{type=270}",
+        "--avcodec-skiploopfilter=all",  # Skip problematic filters
+        "--no-interact"  # Disable interactive controls
         ]
 
         self.instance = vlc.Instance(vlc_options)
