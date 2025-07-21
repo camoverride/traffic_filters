@@ -27,7 +27,11 @@ class StableVLCPlayer:
             "--no-video-title-show",
             "--vout=dummy",  # Headless rendering
             "--verbose=0",  # Reduce logging
-            "--video-filter=transform{type=270}"
+            "--video-filter=transform{type=270}",
+        "--demux=h264",  # Force H264 demuxer
+        "--video-filter=",  # Clear filters
+        "--vcodec=avcodec",  # Specify decoder
+        "--avcodec-options=refcounted_frames=1:pixel_format=yuv420p"  # Set format
         ]
 
         self.instance = vlc.Instance(vlc_options)
