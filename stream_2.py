@@ -9,10 +9,8 @@ def set_vlc_window(player, window_id):
     if system == "Windows":
         player.set_hwnd(window_id)
     elif system == "Linux":
-        player.set_xwindow(window_id)  # X11 window id
+        player.set_xwindow(window_id)
     elif system == "Darwin":
-        # macOS: VLC Python bindings do not expose set_nsobject easily
-        # So embedding is tricky. We'll skip for now.
         print("Embedding VLC in pygame window is not supported on macOS in this example.")
     else:
         print(f"Unsupported OS: {system}")
@@ -34,8 +32,7 @@ if __name__ == "__main__":
     media = instance.media_new(url)
     player.set_media(media)
 
-    # Important: get the window ID from pygame's display surface
-    window_id = screen.get_window_id()  # This works for pygame 2.x
+    window_id = pygame.display.get_window_id()
 
     set_vlc_window(player, window_id)
 
