@@ -25,7 +25,7 @@ class StableVLCPlayer:
             "--drop-late-frames",
             "--skip-frames",
             "--no-video-title-show",
-            "--vout=dummy",  # Headless rendering
+            "--vout=vmem",
             "--verbose=0",  # Reduce logging
         "--avcodec-skiploopfilter=all",  # Skip problematic filters
         "--no-interact",  # Disable interactive controls
@@ -93,7 +93,9 @@ def main():
                 player.stop()
                 time.sleep(5)
                 if not player.start():
-                    break
+                    logging.warning("Restart failed, retrying in 10s...")
+                    time.sleep(10)
+                    continue  # retry loop
                 last_active = time.time()
 
             # Process frames
