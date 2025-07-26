@@ -2,83 +2,64 @@ import av
 import cv2
 import time
 import yaml
-import threading
-from collections import deque
 from object_detection import draw_bbs
 
-with open("config.yaml", "r") as file:
-    config = yaml.safe_load(file)
+
+with open("config.yaml", "r") as f:
+    config = yaml.safe_load(f)
 
 url = config["traffic_cam_url"]
 
-FRAME_WIDTH = 1280
-FRAME_HEIGHT = 720
-TARGET_FPS = 15
-BUFFER_SECONDS = 10
-BUFFER_SIZE = TARGET_FPS * BUFFER_SECONDS
+def play_stream(url):
+    container = av.open(url)
 
-frame_buffer = deque(maxlen=BUFFER_SIZE)
-stop_flag = False
+    stream = container.streams.video[0]
+    stream.thread_type = 'AUTO'
 
-def frame_producer():
-    global stop_flag
-    try:
-        container = av.open(url)
-        for frame in container.decode(video=0):
-            if stop_flag:
-                break
-            img = frame.to_ndarray(format='bgr24')
-            if img.shape[1] != FRAME_WIDTH or img.shape[0] != FRAME_HEIGHT:
-                img = cv2.resize(img, (FRAME_WIDTH, FRAME_HEIGHT))
-            frame_buffer.append(img)
-    except Exception as e:
-        print(f"Producer error: {e}")
-    finally:
-        container.close()
+    # We will use PTS and time_base for timing
+    start_time = None  # Wall clock when playback started
+    first_pts = None   # PTS of first frame
 
-def main():
-    global stop_flag
+    for frame in container.decode(stream):
+        # Get frame pts in seconds
+        if frame.pts is None:
+            # No timestamp, skip frame
+            continue
+        pts_time = frame.pts * frame.time_base
 
-    producer_thread = threading.Thread(target=frame_producer, daemon=True)
-    producer_thread.start()
+        if start_time is None:
+            # Mark the playback start wall clock time and first frame pts
+            start_time = time.time()
+            first_pts = pts_time
 
-    # Wait until buffer fills up somewhat
-    print("Buffering frames...")
-    while len(frame_buffer) < BUFFER_SIZE // 2:
-        time.sleep(0.1)
+        # Calculate how long we should wait (relative to playback start)
+        elapsed = time.time() - start_time
+        wait_time = (pts_time - first_pts) - elapsed
 
-    print("Starting playback")
+        if wait_time > 0:
+            # Frame is early, wait
+            time.sleep(wait_time)
+        elif abs(wait_time) > 1:
+            # Large jump backward or forward, reset clocks
+            start_time = time.time()
+            first_pts = pts_time
 
-    frame_time = 1.0 / TARGET_FPS
-    last_frame_time = time.time()
+        # Convert frame to BGR for OpenCV
+        img = frame.to_ndarray(format='bgr24')
 
-    try:
-        while True:
-            if not frame_buffer:
-                # Buffer empty, wait a bit for producer to catch up
-                time.sleep(0.01)
-                continue
+        # Optional: resize if needed (uncomment)
+        # img = cv2.resize(img, (1280, 720))
 
-            frame = frame_buffer.popleft()
+        # Draw bounding boxes or other overlays
+        img = draw_bbs(img)
 
-            frame = draw_bbs(frame)
+        cv2.imshow('Live Stream Playback', img)
 
-            cv2.imshow("Buffered Stream Playback", frame)
+        if cv2.waitKey(1) & 0xFF == 27:  # ESC key to exit
+            break
 
-            # Wait to maintain target FPS
-            elapsed = time.time() - last_frame_time
-            sleep_time = max(0, frame_time - elapsed)
-            time.sleep(sleep_time)
-            last_frame_time = time.time()
-
-            if cv2.waitKey(1) & 0xFF == 27:
-                break
-    except KeyboardInterrupt:
-        print("Interrupted by user")
-    finally:
-        stop_flag = True
-        producer_thread.join()
-        cv2.destroyAllWindows()
+    container.close()
+    cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    main()
+    play_stream(url)
