@@ -122,7 +122,7 @@ def main():
                     frame = np.flipud(player.frame.copy())
 
                     # Get correct rotation.
-                    # frame = cv2.rotate(frame, cv2.ROTATE_180)
+                    frame = cv2.rotate(frame, cv2.ROTATE_180)
 
                     # Get into correct model format.
                     frame = np.ascontiguousarray(frame)
