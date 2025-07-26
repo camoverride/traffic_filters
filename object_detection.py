@@ -3,7 +3,10 @@ import cv2
 from ultralytics import YOLO
 
 # Load the YOLOv8n model only once
-model = YOLO("yolov8n.pt")  # You can swap in yolov5n, yolonas_nano, etc.
+# model = YOLO("yolov8n.pt")  # You can swap in yolov5n, yolonas_nano, etc.
+model = YOLO("yolov8m.pt")  # You can swap in yolov5n, yolonas_nano, etc.
+# model = YOLO("yolov8nx.pt")  # You can swap in yolov5n, yolonas_nano, etc.
+
 
 def draw_bbs(
     frame,
@@ -25,7 +28,7 @@ def draw_bbs(
     Returns:
         np.ndarray: Frame with drawn bounding boxes.
     """
-    results = model.predict(frame, conf=conf_threshold, verbose=False)[0]
+    results = model.predict(frame, conf=conf_threshold, imgsz=768, verbose=False)[0]
 
     # Iterate through detections
     for box in results.boxes:
