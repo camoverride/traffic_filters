@@ -7,6 +7,9 @@ import numpy as np
 import pygame
 import threading
 
+from object_detection import draw_bbs
+
+
 class StableVLCPlayer:
     def __init__(self, url, width=1024, height=768):
         self.url = url
@@ -104,6 +107,10 @@ def main():
                     frame = np.rot90(frame) # rotate
                     frame = np.rot90(frame) # rotate
                     frame = frame[..., [2, 1, 0]]  # BGR to RGB
+
+                    # YOLO draw frames
+                    frame = draw_bbs(frame)
+
                     player.frame_ready = False
 
                 surf = pygame.surfarray.make_surface(frame)
