@@ -11,26 +11,25 @@ from object_detection import draw_bbs
 with open("config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
-url = config["traffic_cam_url"]
 
-WIDTH, HEIGHT = 1280, 720
-FPS = 15
-FRAME_TIME = 1.0 / FPS
-
+# FFMPEG command arguments.
 ffmpeg_cmd = [
     "ffmpeg",
-    "-i", url,
+    "-i", config["traffic_cam_url"],
     "-loglevel", "quiet",
-    "-an",  # no audio
+    "-an", # no audio
     "-f", "rawvideo",
     "-pix_fmt", "bgr24",
-    "-vf", f"scale={WIDTH}:{HEIGHT}",
+    "-vf", f"scale={config['width']}:{config['height']}",
     "-"
 ]
 
+# Open the stream with FFMPEG
 pipe = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, bufsize=10**8)
-frame_size = WIDTH * HEIGHT * 3
+frame_size = config["width"] * config["height"] * 3
 
+
+# Main event loop.
 try:
     while True:
         start_time = time.time()
@@ -40,7 +39,8 @@ try:
             break
         
         # Copy here to avoid readonly buffer error with OpenCV drawing
-        frame = np.frombuffer(raw_frame, np.uint8).reshape((HEIGHT, WIDTH, 3)).copy()
+        frame = np.frombuffer(raw_frame, np.uint8)\
+            .reshape((config["height"], config["width"], 3)).copy()
         
         # Now safe to draw bounding boxes
         frame = draw_bbs(frame=frame,
@@ -49,14 +49,16 @@ try:
                          draw_labels=config["draw_labels"],
                          conf_threshold=config["conf_threshold"])
         
-        cv2.imshow("Video Stream", frame)
-        if cv2.waitKey(1) & 0xFF == 27:  # ESC to quit
+        cv2.imshow("CCTV Stream", frame)
+        if cv2.waitKey(1) & 0xFF == 27:
             break
         
         elapsed = time.time() - start_time
-        sleep_time = FRAME_TIME - elapsed
+        frame_time = 1.0 / config["fps"]
+        sleep_time = frame_time - elapsed
         if sleep_time > 0:
             time.sleep(sleep_time)
+
 finally:
     pipe.stdout.close() # type: ignore
     pipe.terminate()

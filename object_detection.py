@@ -19,7 +19,7 @@ def draw_bbs(frame : np.ndarray,
              draw_labels : bool,
              conf_threshold : float):
     """
-    Draw bounding boxes around detected objects in a frame using YOLOv8.
+    Draw bounding boxes around detected objects using YOLOv8.
 
     Parameters
     ----------
@@ -54,12 +54,30 @@ def draw_bbs(frame : np.ndarray,
         x1, y1, x2, y2 = map(int, box.xyxy[0])
 
         # Draw rectangle
-        cv2.rectangle(frame, (x1, y1), (x2, y2), bb_color, 2)
+        cv2.rectangle(frame,
+                      (x1, y1),
+                      (x2, y2),
+                      bb_color,
+                      2)
 
+        # Draw labels
         if draw_labels:
             label = f"{cls_name} {conf:.2f}"
-            (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-            cv2.rectangle(frame, (x1, y1 - 20), (x1 + w, y1), bb_color, -1)
-            cv2.putText(frame, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+            (w, h), _ = cv2.getTextSize(label,
+                                        cv2.FONT_HERSHEY_SIMPLEX,
+                                        0.5,
+                                        1)
+            cv2.rectangle(frame,
+                          (x1, y1 - 20),
+                          (x1 + w, y1),
+                          bb_color,
+                          -1)
+            cv2.putText(frame,
+                        label,
+                        (x1, y1 - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (0, 0, 0),
+                        1)
 
     return frame
