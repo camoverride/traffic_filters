@@ -123,7 +123,7 @@ def main():
                     player.frame_ready = False
 
                 # Display in Pygame
-                surf = pygame.surfarray.make_surface(np.transpose(frame, (1, 0, 2)))
+                surf = pygame.surfarray.make_surface(frame)
                 screen.blit(surf, (0, 0))
                 pygame.display.flip()
                 last_active = time.time()
