@@ -104,6 +104,7 @@ def main():
                 with player.frame_lock:
                     frame = np.flipud(player.frame.copy())  # This fixes the mirroring
                     frame = np.rot90(frame, 3)
+                    frame = np.ascontiguousarray(frame, dtype=np.uint8)
                     frame = frame.astype(np.uint8)
 
                     # YOLO draw frames
