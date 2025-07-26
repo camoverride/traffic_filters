@@ -6,9 +6,7 @@ import vlc
 import numpy as np
 import pygame
 import threading
-import cv2
 
-from object_detection import draw_bbs
 
 
 class StableVLCPlayer:
@@ -30,10 +28,10 @@ class StableVLCPlayer:
             "--skip-frames",
             "--no-video-title-show",
             "--verbose=0",  # Reduce logging
-            "--avcodec-skiploopfilter=all",  # Skip problematic filters
-            "--no-interact",  # Disable interactive controls
-            "--no-xlib",
-            "--codec=avcodec",
+        "--avcodec-skiploopfilter=all",  # Skip problematic filters
+        "--no-interact",  # Disable interactive controls
+        "--no-xlib",
+        "--codec=avcodec",
         ]
 
         self.instance = vlc.Instance(vlc_options)
@@ -72,7 +70,6 @@ class StableVLCPlayer:
         self.player.stop()
         time.sleep(1)  # Allow cleanup
 
-
 def main():
     pygame.init()
     screen = pygame.display.set_mode((1024, 768))
@@ -104,25 +101,13 @@ def main():
             # Process frames
             if player.frame_ready:
                 with player.frame_lock:
-                    frame = player.frame.copy()
-
-                    # Fix vertical flip and rotate
-                    frame = np.flipud(frame)
-                    frame = np.rot90(frame, 3)  # 270 degrees = rotate left
-                    frame = np.ascontiguousarray(frame, dtype=np.uint8)
-
-                    # Fix color: VLC gives BGR, but model expects RGB
-                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-                    # Run detection and draw boxes (which will now be in rotated space)
-                    frame = draw_bbs(frame)
-
-                    # Convert back for pygame (which expects (R, G, B))
-                    frame = np.ascontiguousarray(frame, dtype=np.uint8)
-
+                    frame = np.flipud(player.frame.copy())  # This fixes the mirroring
+                    frame = np.rot90(frame) # rotate
+                    frame = np.rot90(frame) # rotate
+                    frame = np.rot90(frame) # rotate
+                    frame = frame[..., [2, 1, 0]]  # BGR to RGB
                     player.frame_ready = False
 
-                # Display in Pygame
                 surf = pygame.surfarray.make_surface(frame)
                 screen.blit(surf, (0, 0))
                 pygame.display.flip()
@@ -135,7 +120,6 @@ def main():
     finally:
         player.stop()
         pygame.quit()
-
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
