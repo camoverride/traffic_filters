@@ -6,6 +6,7 @@ import vlc
 import numpy as np
 import pygame
 import threading
+import cv2
 
 from object_detection import draw_bbs
 
@@ -103,25 +104,26 @@ def main():
             # Process frames
             if player.frame_ready:
                 with player.frame_lock:
-                    frame = np.flipud(player.frame.copy())       # Fix mirroring
-                    frame = np.rot90(frame, 3)                   # Rotate to correct orientation
-                    frame = np.ascontiguousarray(frame, dtype=np.uint8)  # Ensure proper memory layout
+                    frame = player.frame.copy()
 
-                    # Convert RGB to BGR for OpenCV
-                    frame_bgr = frame[..., ::-1]
-                    frame_bgr = np.ascontiguousarray(frame_bgr, dtype=np.uint8)
+                    # Fix vertical flip and rotate
+                    frame = np.flipud(frame)
+                    frame = np.rot90(frame, 3)  # 270 degrees = rotate left
+                    frame = np.ascontiguousarray(frame, dtype=np.uint8)
 
-                    # Draw bounding boxes (OpenCV expects BGR)
-                    frame_bgr = draw_bbs(frame_bgr)
+                    # Fix color: VLC gives BGR, but model expects RGB
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-                    # Convert back to RGB for Pygame
-                    frame_rgb = frame_bgr[..., ::-1]
-                    frame_rgb = np.ascontiguousarray(frame_rgb, dtype=np.uint8)
+                    # Run detection and draw boxes (which will now be in rotated space)
+                    frame = draw_bbs(frame)
+
+                    # Convert back for pygame (which expects (R, G, B))
+                    frame = np.ascontiguousarray(frame, dtype=np.uint8)
 
                     player.frame_ready = False
 
                 # Display in Pygame
-                surf = pygame.surfarray.make_surface(frame_rgb)
+                surf = pygame.surfarray.make_surface(frame)
                 screen.blit(surf, (0, 0))
                 pygame.display.flip()
                 last_active = time.time()
