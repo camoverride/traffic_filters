@@ -123,21 +123,25 @@ def main():
                     frame = np.flipud(player.frame.copy())
                     cv2.imshow("mirrored", frame)
                     time.sleep(2)
+                    cv2.destroyAllWindows()
 
                     # Get correct rotation.
                     frame = np.rot90(frame, 3)
                     cv2.imshow("rotated", frame)
                     time.sleep(2)
+                    cv2.destroyAllWindows()
 
                     # Get into correct model format.
                     frame = np.ascontiguousarray(frame)
                     cv2.imshow("as contig", frame)
                     time.sleep(2)
+                    cv2.destroyAllWindows()
 
                     # Get bounding boxes
                     frame = draw_bbs(frame)
                     cv2.imshow("bbs", frame)
                     time.sleep(2)
+                    cv2.destroyAllWindows()
 
                     player.frame_ready = False
 
