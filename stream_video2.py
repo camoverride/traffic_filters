@@ -117,40 +117,39 @@ def main():
                 last_active = time.time()
 
             # Process frames
-            if player.frame_ready:
-                with player.frame_lock:
-                    # Fix mirroring.
-                    frame = np.flipud(player.frame.copy())
-                    cv2.imshow("mirrored", frame)
-                    time.sleep(2)
-                    cv2.destroyAllWindows()
 
-                    # Get correct rotation.
-                    frame = np.rot90(frame, 3)
-                    cv2.imshow("rotated", frame)
-                    time.sleep(2)
-                    cv2.destroyAllWindows()
+            # Fix mirroring.
+            frame = np.flipud(player.frame.copy())
+            cv2.imshow("mirrored", frame)
+            time.sleep(2)
+            cv2.destroyAllWindows()
 
-                    # Get into correct model format.
-                    frame = np.ascontiguousarray(frame)
-                    cv2.imshow("as contig", frame)
-                    time.sleep(2)
-                    cv2.destroyAllWindows()
+            # Get correct rotation.
+            frame = np.rot90(frame, 3)
+            cv2.imshow("rotated", frame)
+            time.sleep(2)
+            cv2.destroyAllWindows()
 
-                    # Get bounding boxes
-                    frame = draw_bbs(frame)
-                    cv2.imshow("bbs", frame)
-                    time.sleep(2)
-                    cv2.destroyAllWindows()
+            # Get into correct model format.
+            frame = np.ascontiguousarray(frame)
+            cv2.imshow("as contig", frame)
+            time.sleep(2)
+            cv2.destroyAllWindows()
 
-                    player.frame_ready = False
+            # Get bounding boxes
+            frame = draw_bbs(frame)
+            cv2.imshow("bbs", frame)
+            time.sleep(2)
+            cv2.destroyAllWindows()
 
-                surf = pygame.surfarray.make_surface(frame)
-                screen.blit(surf, (0, 0))
-                pygame.display.flip()
-                last_active = time.time()
+            #         player.frame_ready = False
 
-            clock.tick(30)
+            #     surf = pygame.surfarray.make_surface(frame)
+            #     screen.blit(surf, (0, 0))
+            #     pygame.display.flip()
+            #     last_active = time.time()
+
+            # clock.tick(30)
 
 
     except Exception as e:
