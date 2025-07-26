@@ -124,6 +124,9 @@ def main():
                     # Get correct rotation.
                     frame = np.rot90(frame, 3)
 
+                    # Get into correct model format.
+                    frame = np.ascontiguousarray(frame)
+
                     # Get bounding boxes
                     frame = draw_bbs(frame)
 
