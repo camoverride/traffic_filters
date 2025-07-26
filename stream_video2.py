@@ -28,7 +28,10 @@ class StableVLCPlayer:
             "--vout=dummy",  # Headless rendering
             "--verbose=0",  # Reduce logging
         "--avcodec-skiploopfilter=all",  # Skip problematic filters
-        "--no-interact"  # Disable interactive controls
+        "--no-interact",  # Disable interactive controls
+        "--chroma=RV24",  # force raw RGB24 output
+        "--no-xlib",
+        "--codec=avcodec",
         ]
 
         self.instance = vlc.Instance(vlc_options)
