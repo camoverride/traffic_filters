@@ -105,16 +105,20 @@ def main():
             if player.frame_ready:
                 with player.frame_lock:
                     frame = np.flipud(player.frame.copy())  # Fix mirroring
-                    frame = np.rot90(frame, 3)              # Rotate 270° CCW (or 90° CW)
+                    frame = np.rot90(frame, 3)
                     frame = np.ascontiguousarray(frame, dtype=np.uint8)
 
-                    # Draw bounding boxes (expects BGR)
-                    frame = draw_bbs(frame)
+                    # Convert RGB (VLC) → BGR (OpenCV) for drawing
+                    frame_bgr = frame[..., ::-1]
+
+                    # Draw bounding boxes on BGR frame
+                    frame_bgr = draw_bbs(frame_bgr)
+
+                    # Convert back BGR → RGB for pygame display
+                    frame_rgb = frame_bgr[..., ::-1]
 
                     player.frame_ready = False
 
-                # Convert BGR to RGB for pygame display
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 surf = pygame.surfarray.make_surface(frame_rgb)
                 screen.blit(surf, (0, 0))
                 pygame.display.flip()
