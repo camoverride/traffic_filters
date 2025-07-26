@@ -1,6 +1,10 @@
 # URL of the traffic camera.
-# traffic_cam_url: https://61e0c5d388c2e.streamlock.net/live/2_Lenora_NS.stream/chunklist_w165176739.m3u8
 traffic_cam_url: https://61e0c5d388c2e.streamlock.net/live/3_Stewart_NS.stream/chunklist_w1559207018.m3u8
 
-# How often to check if the stream is frozen (seconds)
-check_frozen_time: 10
+# YOLO object detection model (weak: yolov8n.pt; medium: yolov8m.pt; strong: yolov8nx.pt)
+# NOTE: currently only `yolov8n.pt` is supported due to latency.
+yolo_model: yolov8n.pt
+target_classes: ["person"]
+bb_color: (0, 255, 0)
+draw_labels: True
+conf_threshold: 0.1

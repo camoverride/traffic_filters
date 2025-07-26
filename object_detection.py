@@ -1,39 +1,50 @@
-# draw_bbs.py
 import cv2
+import numpy as np
+import yaml
 from ultralytics import YOLO
 
-# Load the YOLOv8n model only once
-# model = YOLO("yolov8n.pt")  # You can swap in yolov5n, yolonas_nano, etc.
-model = YOLO("yolov8m.pt")  # You can swap in yolov5n, yolonas_nano, etc.
-# model = YOLO("yolov8nx.pt")  # You can swap in yolov5n, yolonas_nano, etc.
 
 
-def draw_bbs(
-    frame,
-    target_classes=["person"],
-    bb_color=(0, 255, 0),
-    draw_labels=True,
-    conf_threshold=0.1
-):
+# Load config
+with open("config.yaml", "r") as f:
+    config = yaml.safe_load(f)
+
+# Load the YOLOv8n model
+MODEL = YOLO(config["yolo_model"])
+
+
+def draw_bbs(frame : np.ndarray,
+             target_classes : list,
+             bb_color : tuple,
+             draw_labels : bool,
+             conf_threshold : float):
     """
     Draw bounding boxes around detected objects in a frame using YOLOv8.
 
-    Args:
-        frame (np.ndarray): Input image frame (BGR).
-        target_classes (list): Classes to detect (e.g., ["person"]).
-        bb_color (tuple): Bounding box color (B, G, R).
-        draw_labels (bool): Whether to draw labels above boxes.
-        conf_threshold (float): Minimum confidence threshold.
+    Parameters
+    ----------
+    frame : np.ndarray
+        Input image frame (BGR).
+    target_classes : list
+        Classes to detect (e.g., ["person"]).
+    bb_color : tuple
+        Bounding box color (B, G, R). e.g. (0, 255, 0)
+    draw_labels : bool
+        Whether to draw labels above boxes.
+    conf_threshold : float
+        Minimum confidence threshold.
 
-    Returns:
-        np.ndarray: Frame with drawn bounding boxes.
+    Returns
+    -------
+    np.ndarray
+        Frame with drawn bounding boxes.
     """
-    results = model.predict(frame, conf=conf_threshold, imgsz=768, verbose=False)[0]
+    results = MODEL.predict(frame, conf=conf_threshold, imgsz=768, verbose=False)[0]
 
     # Iterate through detections
     for box in results.boxes: # type: ignore
         cls_id = int(box.cls[0])
-        cls_name = model.names[cls_id]
+        cls_name = MODEL.names[cls_id]
         conf = float(box.conf[0])
 
         if cls_name not in target_classes:

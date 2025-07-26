@@ -5,6 +5,8 @@ import yaml
 import time
 from object_detection import draw_bbs
 
+
+
 # Load config
 with open("config.yaml", "r") as f:
     config = yaml.safe_load(f)
@@ -41,7 +43,11 @@ try:
         frame = np.frombuffer(raw_frame, np.uint8).reshape((HEIGHT, WIDTH, 3)).copy()
         
         # Now safe to draw bounding boxes
-        frame = draw_bbs(frame)
+        frame = draw_bbs(frame=frame,
+                         target_classes=config["target_classes"],
+                         bb_color=config["bb_color"],
+                         draw_labels=config["draw_labels"],
+                         conf_threshold=config["conf_threshold"])
         
         cv2.imshow("Video Stream", frame)
         if cv2.waitKey(1) & 0xFF == 27:  # ESC to quit
