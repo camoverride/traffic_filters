@@ -7,7 +7,7 @@ import numpy as np
 import pygame
 import threading
 import yaml
-
+from object_detection import draw_bbs
 
 
 
@@ -118,9 +118,15 @@ def main():
             # Process frames
             if player.frame_ready:
                 with player.frame_lock:
-                    frame = np.flipud(player.frame.copy())  # This fixes the mirroring
-                    frame = np.rot90(frame, 3) # rotate
-                    # frame = frame[..., [2, 1, 0]]  # BGR to RGB
+                    # Fix mirroring.
+                    frame = np.flipud(player.frame.copy())
+
+                    # Get correct rotation.
+                    frame = np.rot90(frame, 3)
+
+                    # Get bounding boxes
+                    frame = draw_bbs(frame)
+
                     player.frame_ready = False
 
                 surf = pygame.surfarray.make_surface(frame)
