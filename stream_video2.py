@@ -91,6 +91,7 @@ def main():
             if time.time() - last_active > 10:  # 10s timeout
                 logging.warning("Stream timeout - restarting")
                 player.stop()
+                time.sleep(5)
                 if not player.start():
                     break
                 last_active = time.time()
