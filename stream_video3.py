@@ -108,7 +108,7 @@ def main():
             if player.frame_ready:
                 with player.frame_lock:
                     # Fix mirroring.
-                    frame = np.flipud(player.frame.copy())
+                    # frame = np.flipud(player.frame.copy())
 
                     # Rotate 180 degrees (same as rot90 2x)
                     frame = cv2.rotate(frame, cv2.ROTATE_180)
