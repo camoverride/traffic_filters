@@ -1,77 +1,41 @@
 import cv2
-import numpy as np
-import subprocess
-import threading
 import yaml
 import time
-from object_detection import draw_bbs
+from object_detection import draw_bbs  # or stub it to identity
 
 # Load config
 with open("config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 url = config["traffic_cam_url"]
-
 WIDTH, HEIGHT = 1280, 720
-frame_size = WIDTH * HEIGHT * 3
 
-ffmpeg_cmd = [
-    "ffmpeg",
-    "-i", url,
-    "-loglevel", "quiet",
-    "-an",
-    "-f", "rawvideo",
-    "-pix_fmt", "bgr24",
-    "-vf", f"scale={WIDTH}:{HEIGHT}",
-    "-"
-]
+# Open stream
+cap = cv2.VideoCapture(url)
+if not cap.isOpened():
+    print("Error: Unable to open video stream.")
+    exit()
 
-# Shared state
-latest_frame = None
-frame_lock = threading.Lock()
-running = True
-
-def frame_reader():
-    global latest_frame, running
-    pipe = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, bufsize=10**8)
-
-    try:
-        while running:
-            raw = pipe.stdout.read(frame_size)
-            if len(raw) != frame_size:
-                print("Incomplete frame or stream ended.")
-                break
-
-            frame = np.frombuffer(raw, np.uint8).reshape((HEIGHT, WIDTH, 3))
-
-            # Drop previous frame, keep only the latest
-            with frame_lock:
-                latest_frame = frame.copy()
-    finally:
-        running = False
-        pipe.stdout.close()
-        pipe.terminate()
-
-# Start grabbing thread
-reader_thread = threading.Thread(target=frame_reader, daemon=True)
-reader_thread.start()
-
+# Main loop
 try:
-    while running:
-        # Grab the most recent frame snapshot
-        with frame_lock:
-            frame = latest_frame.copy() if latest_frame is not None else None
+    last_frame = None
+    while True:
+        # Always grab the latest frame available
+        for _ in range(5):  # Drop up to 4 stale frames
+            ret, frame = cap.read()
+            if not ret:
+                print("Stream ended.")
+                break
+            last_frame = frame
 
-        if frame is not None:
-            # Process (slow)
-            processed = draw_bbs(frame)
-            cv2.imshow("Live View", processed)
+        if last_frame is not None:
+            frame_resized = cv2.resize(last_frame, (WIDTH, HEIGHT))
+            output = draw_bbs(frame_resized)  # Replace with identity if needed
+            cv2.imshow("Real-Time Stream", output)
 
-        key = cv2.waitKey(1)
-        if key == 27:
+        if cv2.waitKey(1) & 0xFF == 27:
             break
 
 finally:
-    running = False
-    reader_thread.join()
+    cap.release()
     cv2.destroyAllWindows()
