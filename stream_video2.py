@@ -125,7 +125,7 @@ def main():
             cv2.destroyAllWindows()
 
             # Get correct rotation.
-            frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE) 
+            frame = cv2.rotate(frame, cv2.ROTATE_180) 
             cv2.imshow("rotated", frame)
             cv2.waitKey(2000)
             cv2.destroyAllWindows()
