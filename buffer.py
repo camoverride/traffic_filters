@@ -1,69 +1,79 @@
-import gi
+import cv2
 import yaml
-import sys
-import signal
+import threading
+import queue
+import time
 
-gi.require_version('Gst', '1.0')
-from gi.repository import Gst, GObject
+# Load config
+with open("config.yaml", "r") as f:
+    config = yaml.safe_load(f)
 
-# Initialize GStreamer and GObject threads
-Gst.init(None)
-GObject.threads_init()
+url = config["traffic_cam_url"]
 
-def on_message(bus, message, loop):
-    t = message.type
-    if t == Gst.MessageType.EOS:
-        print("End of stream")
-        loop.quit()
-    elif t == Gst.MessageType.ERROR:
-        err, debug = message.parse_error()
-        print(f"Error: {err.message}")
-        if debug:
-            print(f"Debug info: {debug}")
-        loop.quit()
+# Buffer size for frames
+BUFFER_SIZE = 30  # About 2 seconds @15fps
+
+# Frame rate (adjust to your stream's fps)
+FPS = 15
+FRAME_TIME = 1.0 / FPS
+
+# Thread-safe queue for frames
+frame_queue = queue.Queue(maxsize=BUFFER_SIZE)
+
+# Flag to stop threads cleanly
+stop_event = threading.Event()
+
+def frame_reader(url, frame_queue, stop_event):
+    cap = cv2.VideoCapture(url)
+    if not cap.isOpened():
+        print("ERROR: Cannot open video stream")
+        stop_event.set()
+        return
+
+    while not stop_event.is_set():
+        ret, frame = cap.read()
+        if not ret:
+            print("Stream ended or no frame received")
+            stop_event.set()
+            break
+        try:
+            frame_queue.put(frame, timeout=1)
+        except queue.Full:
+            # If queue is full, drop the oldest frame to keep up
+            try:
+                _ = frame_queue.get_nowait()
+                frame_queue.put(frame, timeout=1)
+            except queue.Empty:
+                pass
+
+    cap.release()
 
 def main():
-    # Load config.yaml
-    with open("config.yaml", "r") as f:
-        config = yaml.safe_load(f)
+    threading.Thread(target=frame_reader, args=(url, frame_queue, stop_event), daemon=True).start()
 
-    url = config.get("traffic_cam_url")
-    if not url:
-        print("No 'traffic_cam_url' found in config.yaml")
-        sys.exit(1)
+    while not stop_event.is_set():
+        start_time = time.time()
+        try:
+            frame = frame_queue.get(timeout=2)
+        except queue.Empty:
+            print("No frames received in timeout period, exiting.")
+            break
 
-    # Build GStreamer pipeline string
-    pipeline_str = (
-        f"souphttpsrc location={url} is-live=true "
-        "! hlsdemux "
-        "! decodebin "
-        "! videoconvert "
-        "! autovideosink sync=true"
-    )
+        # Optional: process frame here (e.g. draw bounding boxes)
+        # frame = draw_bbs(frame)
 
-    pipeline = Gst.parse_launch(pipeline_str)
+        cv2.imshow("Stream", frame)
 
-    loop = GObject.MainLoop()
+        if cv2.waitKey(1) & 0xFF == 27:
+            stop_event.set()
+            break
 
-    bus = pipeline.get_bus()
-    bus.add_signal_watch()
-    bus.connect("message", on_message, loop)
+        elapsed = time.time() - start_time
+        time_to_wait = FRAME_TIME - elapsed
+        if time_to_wait > 0:
+            time.sleep(time_to_wait)
 
-    # Start playing
-    pipeline.set_state(Gst.State.PLAYING)
-
-    # Handle Ctrl+C gracefully
-    def signal_handler(sig, frame):
-        print("Interrupted, quitting...")
-        loop.quit()
-    signal.signal(signal.SIGINT, signal_handler)
-
-    try:
-        loop.run()
-    except:
-        pass
-
-    pipeline.set_state(Gst.State.NULL)
+    cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     main()
