@@ -39,7 +39,7 @@ while running:
         break
 
     # Optional: rotate 180 degrees
-    frame = cv2.rotate(frame, cv2.ROTATE_180)
+    # frame = cv2.rotate(frame, cv2.ROTATE_180)
 
     # Process with your overlay function
     frame = draw_bbs(frame)
