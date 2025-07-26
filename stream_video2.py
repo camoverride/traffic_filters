@@ -25,11 +25,9 @@ class StableVLCPlayer:
             "--drop-late-frames",
             "--skip-frames",
             "--no-video-title-show",
-            "--vout=vmem",
             "--verbose=0",  # Reduce logging
         "--avcodec-skiploopfilter=all",  # Skip problematic filters
         "--no-interact",  # Disable interactive controls
-        "--chroma=RV24",  # force raw RGB24 output
         "--no-xlib",
         "--codec=avcodec",
         ]
