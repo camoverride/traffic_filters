@@ -1,65 +1,69 @@
-import av
-import cv2
-import time
+import gi
 import yaml
-from object_detection import draw_bbs
+import sys
+import signal
 
+gi.require_version('Gst', '1.0')
+from gi.repository import Gst, GObject
 
-with open("config.yaml", "r") as f:
-    config = yaml.safe_load(f)
+# Initialize GStreamer and GObject threads
+Gst.init(None)
+GObject.threads_init()
 
-url = config["traffic_cam_url"]
+def on_message(bus, message, loop):
+    t = message.type
+    if t == Gst.MessageType.EOS:
+        print("End of stream")
+        loop.quit()
+    elif t == Gst.MessageType.ERROR:
+        err, debug = message.parse_error()
+        print(f"Error: {err.message}")
+        if debug:
+            print(f"Debug info: {debug}")
+        loop.quit()
 
-def play_stream(url):
-    container = av.open(url)
+def main():
+    # Load config.yaml
+    with open("config.yaml", "r") as f:
+        config = yaml.safe_load(f)
 
-    stream = container.streams.video[0]
-    stream.thread_type = 'AUTO'
+    url = config.get("traffic_cam_url")
+    if not url:
+        print("No 'traffic_cam_url' found in config.yaml")
+        sys.exit(1)
 
-    # We will use PTS and time_base for timing
-    start_time = None  # Wall clock when playback started
-    first_pts = None   # PTS of first frame
+    # Build GStreamer pipeline string
+    pipeline_str = (
+        f"souphttpsrc location={url} is-live=true "
+        "! hlsdemux "
+        "! decodebin "
+        "! videoconvert "
+        "! autovideosink sync=true"
+    )
 
-    for frame in container.decode(stream):
-        # Get frame pts in seconds
-        if frame.pts is None:
-            # No timestamp, skip frame
-            continue
-        pts_time = frame.pts * frame.time_base
+    pipeline = Gst.parse_launch(pipeline_str)
 
-        if start_time is None:
-            # Mark the playback start wall clock time and first frame pts
-            start_time = time.time()
-            first_pts = pts_time
+    loop = GObject.MainLoop()
 
-        # Calculate how long we should wait (relative to playback start)
-        elapsed = time.time() - start_time
-        wait_time = (pts_time - first_pts) - elapsed
+    bus = pipeline.get_bus()
+    bus.add_signal_watch()
+    bus.connect("message", on_message, loop)
 
-        if wait_time > 0:
-            # Frame is early, wait
-            time.sleep(wait_time)
-        elif abs(wait_time) > 1:
-            # Large jump backward or forward, reset clocks
-            start_time = time.time()
-            first_pts = pts_time
+    # Start playing
+    pipeline.set_state(Gst.State.PLAYING)
 
-        # Convert frame to BGR for OpenCV
-        img = frame.to_ndarray(format='bgr24')
+    # Handle Ctrl+C gracefully
+    def signal_handler(sig, frame):
+        print("Interrupted, quitting...")
+        loop.quit()
+    signal.signal(signal.SIGINT, signal_handler)
 
-        # Optional: resize if needed (uncomment)
-        # img = cv2.resize(img, (1280, 720))
+    try:
+        loop.run()
+    except:
+        pass
 
-        # Draw bounding boxes or other overlays
-        img = draw_bbs(img)
-
-        cv2.imshow('Live Stream Playback', img)
-
-        if cv2.waitKey(1) & 0xFF == 27:  # ESC key to exit
-            break
-
-    container.close()
-    cv2.destroyAllWindows()
+    pipeline.set_state(Gst.State.NULL)
 
 if __name__ == "__main__":
-    play_stream(url)
+    main()
