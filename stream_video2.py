@@ -89,9 +89,9 @@ class StableVLCPlayer:
 
 
 def main():
-    pygame.init()
-    screen = pygame.display.set_mode((1024, 768))
-    clock = pygame.time.Clock()
+    # pygame.init()
+    # screen = pygame.display.set_mode((1024, 768))
+    # clock = pygame.time.Clock()
 
     player = StableVLCPlayer(config["traffic_cam_url"])
     if not player.start():
@@ -101,9 +101,9 @@ def main():
     try:
         while player.running:
             # Handle pygame events
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    player.running = False
+            # for event in pygame.event.get():
+            #     if event.type == pygame.QUIT:
+            #         player.running = False
 
             # Stream watchdog
             if time.time() - last_active > 10:  # 10s timeout
@@ -157,8 +157,9 @@ def main():
 
 
     finally:
-        player.stop()
-        pygame.quit()
+        # player.stop()
+        # pygame.quit()
+        cv2.destroyAllWindows()
 
 
 
