@@ -73,7 +73,7 @@ def main():
             print("No frames received for 3 seconds, exiting...")
             break
 
-        frame = draw_bbs(frame)
+        # frame = draw_bbs(frame)
 
         cv2.imshow("Video Stream", frame)
 
