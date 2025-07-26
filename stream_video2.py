@@ -11,7 +11,6 @@ from object_detection import draw_bbs
 import cv2
 
 
-
 with open("config.yaml", "r") as file:
     config = yaml.safe_load(file)
 
@@ -89,9 +88,9 @@ class StableVLCPlayer:
 
 
 def main():
-    # pygame.init()
-    # screen = pygame.display.set_mode((1024, 768))
-    # clock = pygame.time.Clock()
+    pygame.init()
+    screen = pygame.display.set_mode((1024, 768))
+    clock = pygame.time.Clock()
 
     player = StableVLCPlayer(config["traffic_cam_url"])
     if not player.start():
@@ -101,9 +100,9 @@ def main():
     try:
         while player.running:
             # Handle pygame events
-            # for event in pygame.event.get():
-            #     if event.type == pygame.QUIT:
-            #         player.running = False
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    player.running = False
 
             # Stream watchdog
             if time.time() - last_active > 10:  # 10s timeout
@@ -117,29 +116,28 @@ def main():
                 last_active = time.time()
 
             # Process frames
+            if player.frame_ready:
+                with player.frame_lock:
+                    # Fix mirroring.
+                    frame = np.flipud(player.frame.copy())
 
-            # Fix mirroring.
-            frame = np.flipud(player.frame.copy())
+                    # Get correct rotation.
+                    frame = cv2.rotate(frame, cv2.ROTATE_180)
 
-            # Get correct rotation.
-            frame = cv2.rotate(frame, cv2.ROTATE_180) 
+                    # Get into correct model format.
+                    frame = np.ascontiguousarray(frame)
 
-            # Get into correct model format.
-            frame = np.ascontiguousarray(frame)
+                    # Get bounding boxes
+                    frame = draw_bbs(frame)
 
-            # Get bounding boxes
-            frame = draw_bbs(frame)
-            cv2.imshow("bbs", frame)
-            cv2.waitKey(10)
+                    player.frame_ready = False
 
-            #         player.frame_ready = False
+                surf = pygame.surfarray.make_surface(frame)
+                screen.blit(surf, (0, 0))
+                pygame.display.flip()
+                last_active = time.time()
 
-            #     surf = pygame.surfarray.make_surface(frame)
-            #     screen.blit(surf, (0, 0))
-            #     pygame.display.flip()
-            #     last_active = time.time()
-
-            # clock.tick(30)
+            clock.tick(30)
 
 
     except Exception as e:
@@ -147,9 +145,8 @@ def main():
 
 
     finally:
-        # player.stop()
-        # pygame.quit()
-        cv2.destroyAllWindows()
+        player.stop()
+        pygame.quit()
 
 
 
