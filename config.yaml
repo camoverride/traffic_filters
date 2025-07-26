@@ -5,6 +5,6 @@ traffic_cam_url: https://61e0c5d388c2e.streamlock.net/live/3_Stewart_NS.stream/c
 # NOTE: currently only `yolov8n.pt` is supported due to latency.
 yolo_model: yolov8n.pt
 target_classes: ["person"]
-bb_color: (0, 255, 0)
+bb_color: [0, 255, 0]
 draw_labels: True
 conf_threshold: 0.1
