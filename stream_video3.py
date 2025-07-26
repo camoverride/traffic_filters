@@ -85,6 +85,8 @@ def main():
 
     last_active = time.time()
     cv2.namedWindow("Video Stream", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("Video Stream", 1024, 768)  # or any size you want
+
 
     try:
         while player.running:
