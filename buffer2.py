@@ -41,7 +41,7 @@ try:
         frame = np.frombuffer(raw_frame, np.uint8).reshape((HEIGHT, WIDTH, 3)).copy()
         
         # Now safe to draw bounding boxes
-        frame = draw_bbs(frame)
+        # frame = draw_bbs(frame)
         
         cv2.imshow("Video Stream", frame)
         if cv2.waitKey(1) & 0xFF == 27:  # ESC to quit
