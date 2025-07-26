@@ -25,7 +25,8 @@ signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
 # Open the video stream
-cap = cv2.VideoCapture(config["traffic_cam_url"])
+cap = cv2.VideoCapture(f"ffmpeg -i {config['traffic_cam_url']} -f image2pipe -pix_fmt bgr24 -vcodec rawvideo -", cv2.CAP_FFMPEG)
+
 if not cap.isOpened():
     print("Failed to open stream.")
     sys.exit(1)
