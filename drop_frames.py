@@ -13,8 +13,6 @@ with open("config.yaml", "r") as f:
 url = config["traffic_cam_url"]
 
 WIDTH, HEIGHT = 1280, 720
-FPS = 15
-FRAME_TIME = 1.0 / FPS
 frame_size = WIDTH * HEIGHT * 3
 
 ffmpeg_cmd = [
@@ -28,7 +26,7 @@ ffmpeg_cmd = [
     "-"
 ]
 
-# Shared frame buffer (single-frame queue)
+# Shared frame buffer
 latest_frame = None
 frame_lock = threading.Lock()
 running = True
@@ -44,35 +42,30 @@ def grab_frames():
                 break
             frame = np.frombuffer(raw_frame, np.uint8).reshape((HEIGHT, WIDTH, 3))
             with frame_lock:
-                latest_frame = frame
+                latest_frame = frame.copy()  # drop previous
     finally:
         running = False
-        pipe.stdout.close()  # type: ignore
+        pipe.stdout.close() # type: ignore
         pipe.terminate()
 
-# Start grabbing thread
 thread = threading.Thread(target=grab_frames, daemon=True)
 thread.start()
 
 try:
     while running:
-        start_time = time.time()
-
+        frame = None
         with frame_lock:
-            frame = latest_frame.copy() if latest_frame is not None else None
+            if latest_frame is not None:
+                frame = latest_frame.copy()
 
         if frame is not None:
-            processed = draw_bbs(frame)
-            cv2.imshow("Video Stream", processed)
+            output = draw_bbs(frame)
+            cv2.imshow("Video Stream", output)
 
-        if cv2.waitKey(1) & 0xFF == 27:
+        # Let OpenCV handle frame pacing + user input
+        key = cv2.waitKey(1)
+        if key == 27:  # ESC
             break
-
-        # Maintain target frame time
-        elapsed = time.time() - start_time
-        sleep_time = FRAME_TIME - elapsed
-        if sleep_time > 0:
-            time.sleep(sleep_time)
 finally:
     running = False
     thread.join()
