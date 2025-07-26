@@ -1,9 +1,5 @@
 import cv2
-import numpy as np
-import subprocess
 import yaml
-import time
-from object_detection import draw_bbs
 
 # Load config
 with open("config.yaml", "r") as f:
@@ -11,51 +7,32 @@ with open("config.yaml", "r") as f:
 
 url = config["traffic_cam_url"]
 
+# Desired display size
 WIDTH, HEIGHT = 1280, 720
-FPS = 15
-FRAME_TIME = 1.0 / FPS
 
-ffmpeg_cmd = [
-    "ffmpeg",
-    "-i", url,
-    "-loglevel", "quiet",
-    "-an",  # no audio
-    "-f", "rawvideo",
-    "-pix_fmt", "bgr24",
-    "-vf", f"scale={WIDTH}:{HEIGHT}",
-    "-"
-]
+# Open stream using OpenCV
+cap = cv2.VideoCapture(url)
 
-pipe = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, bufsize=10**8)
-frame_size = WIDTH * HEIGHT * 3
-
-frame_count = 0  # To track every other frame
+if not cap.isOpened():
+    print("Error: Could not open video stream.")
+    exit()
 
 try:
     while True:
-        start_time = time.time()
-        raw_frame = pipe.stdout.read(frame_size)  # type: ignore
-        if len(raw_frame) != frame_size:
-            print("Stream ended or incomplete frame")
+        ret, frame = cap.read()
+        if not ret:
+            print("Stream ended or failed.")
             break
-        
-        frame = np.frombuffer(raw_frame, np.uint8).reshape((HEIGHT, WIDTH, 3)).copy()
-        frame_count += 1
 
-        # Only process and display every other frame
-        if frame_count % 2 == 0:
-            frame = draw_bbs(frame)
-            cv2.imshow("Video Stream", frame)
+        # Resize for consistent display size
+        frame = cv2.resize(frame, (WIDTH, HEIGHT))
 
-            if cv2.waitKey(1) & 0xFF == 27:  # ESC to quit
-                break
+        # Show the frame
+        cv2.imshow("Traffic Cam Stream", frame)
 
-        elapsed = time.time() - start_time
-        sleep_time = FRAME_TIME - elapsed
-        if sleep_time > 0:
-            time.sleep(sleep_time)
-
+        # ESC key to quit
+        if cv2.waitKey(1) & 0xFF == 27:
+            break
 finally:
-    pipe.stdout.close()  # type: ignore
-    pipe.terminate()
+    cap.release()
     cv2.destroyAllWindows()
