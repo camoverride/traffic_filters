@@ -6,6 +6,7 @@ import vlc
 import numpy as np
 import pygame
 import threading
+import cv2  # <-- added for color conversion
 
 from object_detection import draw_bbs
 
@@ -29,10 +30,10 @@ class StableVLCPlayer:
             "--skip-frames",
             "--no-video-title-show",
             "--verbose=0",  # Reduce logging
-        "--avcodec-skiploopfilter=all",  # Skip problematic filters
-        "--no-interact",  # Disable interactive controls
-        "--no-xlib",
-        "--codec=avcodec",
+            "--avcodec-skiploopfilter=all",  # Skip problematic filters
+            "--no-interact",  # Disable interactive controls
+            "--no-xlib",
+            "--codec=avcodec",
         ]
 
         self.instance = vlc.Instance(vlc_options)
@@ -71,6 +72,7 @@ class StableVLCPlayer:
         self.player.stop()
         time.sleep(1)  # Allow cleanup
 
+
 def main():
     pygame.init()
     screen = pygame.display.set_mode((1024, 768))
@@ -102,17 +104,18 @@ def main():
             # Process frames
             if player.frame_ready:
                 with player.frame_lock:
-                    frame = np.flipud(player.frame.copy())  # This fixes the mirroring
-                    frame = np.rot90(frame, 3)
+                    frame = np.flipud(player.frame.copy())  # Fix mirroring
+                    frame = np.rot90(frame, 3)              # Rotate 270° CCW (or 90° CW)
                     frame = np.ascontiguousarray(frame, dtype=np.uint8)
-                    frame = frame.astype(np.uint8)
 
-                    # YOLO draw frames
+                    # Draw bounding boxes (expects BGR)
                     frame = draw_bbs(frame)
 
                     player.frame_ready = False
 
-                surf = pygame.surfarray.make_surface(frame)
+                # Convert BGR to RGB for pygame display
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                surf = pygame.surfarray.make_surface(frame_rgb)
                 screen.blit(surf, (0, 0))
                 pygame.display.flip()
                 last_active = time.time()
@@ -124,6 +127,7 @@ def main():
     finally:
         player.stop()
         pygame.quit()
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
