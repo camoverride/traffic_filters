@@ -8,6 +8,7 @@ import pygame
 import threading
 import yaml
 from object_detection import draw_bbs
+import cv2
 
 
 
@@ -120,15 +121,23 @@ def main():
                 with player.frame_lock:
                     # Fix mirroring.
                     frame = np.flipud(player.frame.copy())
+                    cv2.imshow("mirrored", frame)
+                    time.sleep(2)
 
                     # Get correct rotation.
                     frame = np.rot90(frame, 3)
+                    cv2.imshow("rotated", frame)
+                    time.sleep(2)
 
                     # Get into correct model format.
                     frame = np.ascontiguousarray(frame)
+                    cv2.imshow("as contig", frame)
+                    time.sleep(2)
 
                     # Get bounding boxes
                     frame = draw_bbs(frame)
+                    cv2.imshow("bbs", frame)
+                    time.sleep(2)
 
                     player.frame_ready = False
 
