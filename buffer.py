@@ -15,7 +15,7 @@ url = config["traffic_cam_url"]
 
 width, height = 1280, 720  # Set your stream resolution here
 fps = 15  # Set based on stream info, adjust if necessary
-buffer_seconds = 10  # Buffer 10 seconds of video
+buffer_seconds = 30  # Buffer 10 seconds of video
 buffer_size = fps * buffer_seconds
 
 # FFmpeg command to read raw BGR frames from the HLS stream
