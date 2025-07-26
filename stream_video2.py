@@ -101,6 +101,8 @@ def main():
                 with player.frame_lock:
                     frame = np.flipud(player.frame.copy())  # This fixes the mirroring
                     frame = np.rot90(frame) # rotate
+                    frame = np.rot90(frame) # rotate
+                    frame = np.rot90(frame) # rotate
                     frame = frame[..., [2, 1, 0]]  # BGR to RGB
                     player.frame_ready = False
 
