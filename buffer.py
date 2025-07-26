@@ -5,6 +5,7 @@ import threading
 import queue
 import yaml
 import time
+from object_detection import draw_bbs
 
 # Load config
 with open("config.yaml", "r") as f:
@@ -71,6 +72,8 @@ def main():
         except queue.Empty:
             print("No frames received for 3 seconds, exiting...")
             break
+
+        frame = draw_bbs(frame)
 
         cv2.imshow("Video Stream", frame)
 
