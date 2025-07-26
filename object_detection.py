@@ -13,7 +13,7 @@ def draw_bbs(
     target_classes=["person"],
     bb_color=(0, 255, 0),
     draw_labels=True,
-    conf_threshold=0.3
+    conf_threshold=0.1
 ):
     """
     Draw bounding boxes around detected objects in a frame using YOLOv8.
