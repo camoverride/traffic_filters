@@ -6,7 +6,6 @@ import vlc
 import numpy as np
 import pygame
 import threading
-import cv2  # <-- added for color conversion
 
 from object_detection import draw_bbs
 
@@ -104,21 +103,24 @@ def main():
             # Process frames
             if player.frame_ready:
                 with player.frame_lock:
-                    frame = np.flipud(player.frame.copy())  # Fix mirroring
-                    frame = np.rot90(frame, 3)
-                    frame = np.ascontiguousarray(frame, dtype=np.uint8)
+                    frame = np.flipud(player.frame.copy())       # Fix mirroring
+                    frame = np.rot90(frame, 3)                   # Rotate to correct orientation
+                    frame = np.ascontiguousarray(frame, dtype=np.uint8)  # Ensure proper memory layout
 
-                    # Convert RGB (VLC) → BGR (OpenCV) for drawing
+                    # Convert RGB to BGR for OpenCV
                     frame_bgr = frame[..., ::-1]
+                    frame_bgr = np.ascontiguousarray(frame_bgr, dtype=np.uint8)
 
-                    # Draw bounding boxes on BGR frame
+                    # Draw bounding boxes (OpenCV expects BGR)
                     frame_bgr = draw_bbs(frame_bgr)
 
-                    # Convert back BGR → RGB for pygame display
+                    # Convert back to RGB for Pygame
                     frame_rgb = frame_bgr[..., ::-1]
+                    frame_rgb = np.ascontiguousarray(frame_rgb, dtype=np.uint8)
 
                     player.frame_ready = False
 
+                # Display in Pygame
                 surf = pygame.surfarray.make_surface(frame_rgb)
                 screen.blit(surf, (0, 0))
                 pygame.display.flip()
