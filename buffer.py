@@ -1,7 +1,9 @@
 import cv2
-import yaml
+import numpy as np
+import subprocess
 import threading
 import queue
+import yaml
 import time
 
 # Load config
@@ -10,68 +12,76 @@ with open("config.yaml", "r") as f:
 
 url = config["traffic_cam_url"]
 
-# Buffer size for frames
-BUFFER_SIZE = 30  # About 2 seconds @15fps
-
-# Frame rate (adjust to your stream's fps)
+# Set your stream resolution and FPS here
+WIDTH, HEIGHT = 1280, 720
 FPS = 15
 FRAME_TIME = 1.0 / FPS
 
-# Thread-safe queue for frames
-frame_queue = queue.Queue(maxsize=BUFFER_SIZE)
+# Max buffer size of frames to hold
+MAX_BUFFER_SIZE = 30
 
-# Flag to stop threads cleanly
+frame_queue = queue.Queue(maxsize=MAX_BUFFER_SIZE)
 stop_event = threading.Event()
 
-def frame_reader(url, frame_queue, stop_event):
-    cap = cv2.VideoCapture(url)
-    if not cap.isOpened():
-        print("ERROR: Cannot open video stream")
-        stop_event.set()
-        return
+def ffmpeg_reader(url, frame_queue, stop_event):
+    ffmpeg_cmd = [
+        "ffmpeg",
+        "-i", url,
+        "-loglevel", "quiet",
+        "-an",  # no audio
+        "-f", "rawvideo",
+        "-pix_fmt", "bgr24",
+        "-vf", f"scale={WIDTH}:{HEIGHT}",
+        "-"
+    ]
+
+    pipe = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, bufsize=10**8)
+
+    frame_size = WIDTH * HEIGHT * 3
 
     while not stop_event.is_set():
-        ret, frame = cap.read()
-        if not ret:
-            print("Stream ended or no frame received")
+        raw_frame = pipe.stdout.read(frame_size)
+        if len(raw_frame) != frame_size:
+            # Stream ended or error
             stop_event.set()
             break
+        frame = np.frombuffer(raw_frame, np.uint8).reshape((HEIGHT, WIDTH, 3))
+
+        # Put frame in queue, drop oldest if full
         try:
-            frame_queue.put(frame, timeout=1)
+            frame_queue.put(frame, timeout=0.5)
         except queue.Full:
-            # If queue is full, drop the oldest frame to keep up
             try:
-                _ = frame_queue.get_nowait()
-                frame_queue.put(frame, timeout=1)
+                _ = frame_queue.get_nowait()  # discard oldest frame
+                frame_queue.put(frame, timeout=0.5)
             except queue.Empty:
                 pass
 
-    cap.release()
+    pipe.stdout.close()
+    pipe.wait()
 
 def main():
-    threading.Thread(target=frame_reader, args=(url, frame_queue, stop_event), daemon=True).start()
+    # Start ffmpeg reading thread
+    threading.Thread(target=ffmpeg_reader, args=(url, frame_queue, stop_event), daemon=True).start()
 
     while not stop_event.is_set():
         start_time = time.time()
         try:
-            frame = frame_queue.get(timeout=2)
+            frame = frame_queue.get(timeout=3)
         except queue.Empty:
-            print("No frames received in timeout period, exiting.")
+            print("No frames received for 3 seconds, exiting...")
             break
 
-        # Optional: process frame here (e.g. draw bounding boxes)
-        # frame = draw_bbs(frame)
+        cv2.imshow("Video Stream", frame)
 
-        cv2.imshow("Stream", frame)
-
-        if cv2.waitKey(1) & 0xFF == 27:
+        if cv2.waitKey(1) & 0xFF == 27:  # ESC to quit
             stop_event.set()
             break
 
         elapsed = time.time() - start_time
-        time_to_wait = FRAME_TIME - elapsed
-        if time_to_wait > 0:
-            time.sleep(time_to_wait)
+        sleep_time = FRAME_TIME - elapsed
+        if sleep_time > 0:
+            time.sleep(sleep_time)
 
     cv2.destroyAllWindows()
 
