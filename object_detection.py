@@ -31,7 +31,7 @@ def draw_bbs(
     results = model.predict(frame, conf=conf_threshold, imgsz=768, verbose=False)[0]
 
     # Iterate through detections
-    for box in results.boxes:
+    for box in results.boxes: # type: ignore
         cls_id = int(box.cls[0])
         cls_name = model.names[cls_id]
         conf = float(box.conf[0])

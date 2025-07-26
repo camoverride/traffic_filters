@@ -6,7 +6,13 @@ import vlc
 import numpy as np
 import pygame
 import threading
+import yaml
 
+
+
+
+with open("config.yaml", "r") as file:
+    config = yaml.safe_load(file)
 
 
 class StableVLCPlayer:
@@ -19,23 +25,22 @@ class StableVLCPlayer:
         self.frame_ready = False
         self.running = True
 
-        # Conservative VLC options
+        # VLC options
         vlc_options = [
             "--no-audio",
             "--avcodec-hw=none",
-            "--network-caching=10000",  # 10s buffer
+            "--network-caching=10000", # 10s buffer
             "--drop-late-frames",
             "--skip-frames",
             "--no-video-title-show",
-            "--verbose=0",  # Reduce logging
-        "--avcodec-skiploopfilter=all",  # Skip problematic filters
-        "--no-interact",  # Disable interactive controls
-        "--no-xlib",
-        "--codec=avcodec",
-        ]
+            "--verbose=0", # Reduce logging
+            "--avcodec-skiploopfilter=all",  # Skip problematic filters
+            "--no-interact", # Disable interactive controls
+            "--no-xlib",
+            "--codec=avcodec"]
 
         self.instance = vlc.Instance(vlc_options)
-        self.player = self.instance.media_player_new()
+        self.player = self.instance.media_player_new() # type: ignore
         self._setup_callbacks()
 
     def _setup_callbacks(self):
@@ -53,14 +58,25 @@ class StableVLCPlayer:
             return None
 
         # Keep references to callbacks
-        self._lock_cb = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))(lock_cb)
-        self._unlock_cb = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))(unlock_cb)
+        self._lock_cb = ctypes.CFUNCTYPE(None,
+                                         ctypes.c_void_p,
+                                         ctypes.POINTER(ctypes.c_void_p))(lock_cb)
+        self._unlock_cb = ctypes.CFUNCTYPE(None,
+                                           ctypes.c_void_p,
+                                           ctypes.c_void_p,
+                                           ctypes.POINTER(ctypes.c_void_p))(unlock_cb)
 
-        self.player.video_set_callbacks(self._lock_cb, self._unlock_cb, None, None)
-        self.player.video_set_format("RV24", self.width, self.height, self.width * 3)
+        self.player.video_set_callbacks(self._lock_cb,
+                                        self._unlock_cb,
+                                        None,
+                                        None)
+        self.player.video_set_format("RV24",
+                                     self.width,
+                                     self.height,
+                                     self.width * 3)
 
     def start(self):
-        media = self.instance.media_new(self.url)
+        media = self.instance.media_new(self.url) # type: ignore
         media.add_option(":network-caching=10000")
         self.player.set_media(media)
         return self.player.play() == 0
@@ -70,12 +86,13 @@ class StableVLCPlayer:
         self.player.stop()
         time.sleep(1)  # Allow cleanup
 
+
 def main():
     pygame.init()
     screen = pygame.display.set_mode((1024, 768))
     clock = pygame.time.Clock()
 
-    player = StableVLCPlayer("https://61e0c5d388c2e.streamlock.net/live/3_Stewart_NS.stream/chunklist_w1559207018.m3u8")
+    player = StableVLCPlayer(config["traffic_cam_url"])
     if not player.start():
         sys.exit(1)
 
@@ -102,9 +119,7 @@ def main():
             if player.frame_ready:
                 with player.frame_lock:
                     frame = np.flipud(player.frame.copy())  # This fixes the mirroring
-                    frame = np.rot90(frame) # rotate
-                    frame = np.rot90(frame) # rotate
-                    frame = np.rot90(frame) # rotate
+                    frame = np.rot90(frame, 1) # rotate
                     frame = frame[..., [2, 1, 0]]  # BGR to RGB
                     player.frame_ready = False
 
@@ -115,11 +130,16 @@ def main():
 
             clock.tick(30)
 
+
     except Exception as e:
         logging.error(f"Fatal error: {e}")
+
+
     finally:
         player.stop()
         pygame.quit()
+
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
