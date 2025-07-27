@@ -268,6 +268,8 @@ def main(max_retries: int,
 
 
 if __name__ == "__main__":
+    # Enable screen when connected via SSH.
+    os.environ["DISPLAY"] = ":0"
 
     logger.info("Starting CCTV Stream program")
 
