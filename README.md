@@ -13,8 +13,10 @@ Display filtered video streams from Seattle Department of Transit (SDOT) cameras
 - `pip install -r requirements.txt`
 - `sudo apt-get install unclutter`
 
-Add the dimensions of your monitor to `config.yaml` and optionally
-select a new traffic camera.
+
+## Test
+
+- `python stream_video.py`
 
 
 ## Run

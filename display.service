@@ -7,13 +7,13 @@ Type=simple
 NotifyAccess=all
 Restart=always
 RestartSec=10
-WorkingDirectory=/home/pi/traffic_filters
-ExecStart=/home/pi/traffic_filters/.venv/bin/python /home/pi/traffic_filters/stream_video.py
+WorkingDirectory=/home/cam/traffic_filters
+ExecStart=/home/ca,/traffic_filters/.venv/bin/python /home/ca,/traffic_filters/stream_video.py
 WatchdogSec=1min
 RuntimeMaxSec=1h
 StandardOutput=journal
 StandardError=journal
-Environment="PATH=/home/pi/traffic_filters/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="PATH=/home/cam/traffic_filters/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 [Install]
 WantedBy=default.target
