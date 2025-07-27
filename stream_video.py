@@ -1,8 +1,9 @@
 import cv2
 import numpy as np
+import os
 import subprocess
-import yaml
 import time
+import yaml
 from object_detection import draw_bbs
 
 
@@ -123,5 +124,9 @@ def main(max_retries : int,
 
 
 if __name__ == "__main__":
+    # Enable screen when connected via SSH.
+    os.environ["DISPLAY"] = ":0"
+
+    # Run the video stream.
     main(max_retries = 10000,
          retry_delay = 3)
