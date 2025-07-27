@@ -10,12 +10,15 @@ Display filtered video streams from Seattle Department of Transit (SDOT) cameras
 - `cd traffic_filters`
 - `python3 -m venv .venv`
 - `source .venv/bin/activate`
+- `sudo apt update`
+- `sudo apt install ffmpeg`
 - `pip install -r requirements.txt`
 - `sudo apt-get install unclutter`
 
 
 ## Test
 
+- `export DISPLAY=:0`
 - `python stream_video.py`
 
 

@@ -268,7 +268,6 @@ def main(max_retries: int,
 
 
 if __name__ == "__main__":
-    os.environ["DISPLAY"] = ":0"
 
     logger.info("Starting CCTV Stream program")
 
