@@ -205,7 +205,7 @@ def main(max_retries: int,
                     files = [f for f in files if os.path.isfile(f)]
                     files.sort(key=os.path.getctime, reverse=True)  # newest first
 
-                    for old_file in files[50:]:
+                    for old_file in files[200:]:
                         try:
                             os.remove(old_file)
                         except Exception as e:
