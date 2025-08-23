@@ -1,5 +1,6 @@
 import cv2
 import time
+import numpy as np
 import os
 from object_detection import draw_bbs
 import yaml
@@ -25,9 +26,17 @@ def display_frames(frames_dir : str) -> None:
     with open("config.yaml", "r") as f:
         config = yaml.safe_load(f)
 
-    # Set up the window.
-    cv2.namedWindow("CCTV Footage", cv2.WND_PROP_FULLSCREEN)
-    cv2.setWindowProperty("CCTV Footage", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    # Create window as normal first.
+    cv2.namedWindow("Display Image", cv2.WINDOW_NORMAL)
+
+    # Show an image first, THEN set fullscreen.
+    dummy_image = np.zeros((100, 100, 3), dtype=np.uint8)
+    cv2.imshow("Display Image", dummy_image)
+    cv2.waitKey(100)  # Brief wait to ensure window is created
+
+    # Now set fullscreen.
+    cv2.setWindowProperty("Display Image", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
 
     # Main event loop.
     while True:
