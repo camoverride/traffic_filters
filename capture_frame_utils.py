@@ -29,7 +29,7 @@ def initialize_stream(config : dict) -> subprocess.Popen:
         Expected keys:
             - "traffic_cam_url" : str
                 The input video stream URL.
-            - "width" : int)
+            - "width" : int
                 The desired output video width.
             - "height" : int
                 The desired output video height.
@@ -62,14 +62,15 @@ def initialize_stream(config : dict) -> subprocess.Popen:
     return subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, bufsize=10**8)
 
 
-def threaded_read(pipe : subprocess.Popen,
-                  size : int,
-                  result_container : list) -> None:
+def threaded_read(
+        pipe : subprocess.Popen,
+        size : int,
+        result_container : list) -> None:
     """
     Reads `size` bytes from pipe.stdout in a
     separate thread and stores it in result_container[0].
     The read data or exception is appended as the first
-    elementto `result_container`.
+    element to `result_container`.
 
     NOTE: Reading from pipe.stdout is blocking;
     running in a separate thread allows imposing a timeout
@@ -105,9 +106,10 @@ def threaded_read(pipe : subprocess.Popen,
         result_container.append(e)
 
 
-def main(max_retries: int,
-         retry_delay: int,
-         frame_timeout : int) -> None:
+def write_frames(
+    max_retries: int,
+    retry_delay: int,
+    frame_timeout : int) -> None:
     """
     Main event loop.
 
@@ -125,17 +127,16 @@ def main(max_retries: int,
     None
         Streams video.
     """
-    # Load config
+    # Load config.
     logger.info("Loading configuration from config.yaml")
     with open("config.yaml", "r") as f:
         config = yaml.safe_load(f)
 
-    # Bytes per frame: width*height*3 color channels
+    # Bytes per frame: width*height*3 color channels.
     frame_size = config["width"] * config["height"] * 3
 
-    # Count consecutive failures to apply exponential backoff
+    # Count consecutive failures to apply exponential backoff.
     retry_count = 0
-
 
     while True:
         # Start new ffmpeg process for streaming
@@ -151,7 +152,7 @@ def main(max_retries: int,
                 result = []
                 read_thread = threading.Thread(target=threaded_read,
                                                args=(pipe, frame_size, result))
-                
+
                 # Start a thread to read raw frame bytes asynchronously.
                 read_thread.start()
 
@@ -184,35 +185,29 @@ def main(max_retries: int,
                 try:
                     frame = np.frombuffer(raw_frame, np.uint8)\
                             .reshape((config["height"], config["width"], 3)).copy()
-                    
+
                 # Raise to trigger reconnect logic
                 except Exception as e:
                     logger.error(f"Error decoding frame: {e}. Restarting stream.")
                     raise
 
-                # Show the frame in an OpenCV window.
-                # Catch cv2 errors which can occur if display context is lost
-                # to avoid crashing the whole program.
                 try:
-                    # cv2.imshow("CCTV Stream", frame)
+                    # Generate a file name.
                     filename = f"frames/{uuid.uuid4()}.png"
+
+                    # Write the file.
                     cv2.imwrite(filename, frame)
 
-
-                    # DELETE OLD
-                    folder = "frames"
-                    files = [os.path.join(folder, f) for f in os.listdir(folder)]
+                    # Delete older excess frames.
+                    files = [os.path.join("frames", f) for f in os.listdir("frames")]
                     files = [f for f in files if os.path.isfile(f)]
                     files.sort(key=os.path.getctime, reverse=True)  # newest first
 
-                    for old_file in files[200:]:
+                    for old_file in files[50:]:
                         try:
                             os.remove(old_file)
                         except Exception as e:
                             print(f"Failed to remove {old_file}: {e}")
-                    ######
-                    if cv2.waitKey(1) & 0xFF == 27:
-                        raise KeyboardInterrupt  # Exit on ESC key
                 
                 # Restart stream or shutdown
                 except cv2.error as e:
@@ -228,13 +223,14 @@ def main(max_retries: int,
                 sleep_time = max(0.001, frame_time - elapsed)
                 time.sleep(sleep_time)
 
+        # Exit on keyboard interrupt.
         except KeyboardInterrupt:
             logger.info("User requested exit")
             break
 
+        # Keep trying to reconnect.
         except Exception as e:
             logger.error(f"Error: {e}. Attempting to reconnect...")
-
 
         # Cleanup: close pipe stdout, terminate ffmpeg process cleanly
         # and if it doesn't terminate in time, kill it forcefully.
@@ -256,7 +252,6 @@ def main(max_retries: int,
                     pipe.kill()
                     pipe.wait()
 
-
             retry_count += 1
 
             if retry_count >= max_retries:
@@ -277,11 +272,15 @@ def main(max_retries: int,
 
 
 if __name__ == "__main__":
-    # Enable screen when connected via SSH.
+
+    # Give access to the display.
     os.environ["DISPLAY"] = ":0"
 
+    # Log beginning.
     logger.info("Starting CCTV Stream program")
 
-    main(max_retries=10000,
-         retry_delay=3,
-         frame_timeout=5)
+    # Get frames from CCTV stream and write them.
+    write_frames(
+        max_retries=10000,
+        retry_delay=3,
+        frame_timeout=5)
