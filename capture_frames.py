@@ -6,23 +6,21 @@ import subprocess
 import time
 import yaml
 import threading
-from object_detection import draw_bbs
-
 import uuid
 
 
-# Configure logger at the top
+
+# Configure logger.
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
+    datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger(__name__)
 
 
-def initialize_stream(config : dict):
+def initialize_stream(config : dict) -> subprocess.Popen:
     """
-     Initialize and start an FFMPEG subprocess to stream video from a URL.
+    Initialize and start an FFMPEG subprocess to stream video from a URL.
 
     Parameters
     ----------
@@ -192,14 +190,6 @@ def main(max_retries: int,
                     logger.error(f"Error decoding frame: {e}. Restarting stream.")
                     raise
 
-                # frame = draw_bbs(frame=frame,
-                #                  target_classes=config["target_classes"],
-                #                  bb_color=config["bb_color"],
-                #                  draw_labels=config["draw_labels"],
-                #                  conf_threshold=config["conf_threshold"])
-
-                frame = frame
-
                 # Show the frame in an OpenCV window.
                 # Catch cv2 errors which can occur if display context is lost
                 # to avoid crashing the whole program.
@@ -215,7 +205,7 @@ def main(max_retries: int,
                     files = [f for f in files if os.path.isfile(f)]
                     files.sort(key=os.path.getctime, reverse=True)  # newest first
 
-                    for old_file in files[20:]:
+                    for old_file in files[50:]:
                         try:
                             os.remove(old_file)
                         except Exception as e:
