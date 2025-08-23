@@ -25,6 +25,10 @@ def display_frames(frames_dir : str) -> None:
     with open("config.yaml", "r") as f:
         config = yaml.safe_load(f)
 
+    # Set up the window.
+    cv2.namedWindow("CCTV Footage", cv2.WND_PROP_FULLSCREEN)
+    cv2.setWindowProperty("CCTV Footage", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
     # Main event loop.
     while True:
 
