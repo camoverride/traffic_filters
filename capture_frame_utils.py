@@ -4,9 +4,9 @@ import numpy as np
 import os
 import subprocess
 import time
+from typing import Callable
 import yaml
 import threading
-import uuid
 
 
 
@@ -22,17 +22,17 @@ def initialize_stream(config : dict) -> subprocess.Popen:
     """
     Initialize and start an FFMPEG subprocess to stream video from a URL.
 
+    This function constructs the ffmpeg command line using parameters
+    from the `config` dictionary. The process outputs raw video frames
+    directly to its stdout pipe, enabling frame-by-frame reading.
+
     Parameters
     ----------
     config : dict
-        Configuration dictionary containing stream parameters.
-        Expected keys:
-            - "traffic_cam_url" : str
-                The input video stream URL.
-            - "width" : int
-                The desired output video width.
-            - "height" : int
-                The desired output video height.
+        Configuration dictionary with keys:
+            - "traffic_cam_url" (str): URL of the video stream.
+            - "width" (int): Desired output frame width.
+            - "height" (int): Desired output frame height.
 
     Returns
     -------
@@ -40,247 +40,238 @@ def initialize_stream(config : dict) -> subprocess.Popen:
         A subprocess object representing the running FFMPEG process,
         with stdout set to a pipe for raw video frames.
     """
-
     logger.info("Initializing ffmpeg stream subprocess.")
+
+    # Build ffmpeg command arguments list:
+    # -i <input>            : input stream URL
+    # -loglevel quiet       : suppress ffmpeg console output for clarity
+    # -an                   : disable audio to save processing
+    # -f rawvideo           : output raw frames, no container format
+    # -pix_fmt bgr24        : pixel format compatible with OpenCV (BGR color)
+    # -vf scale WxH         : resize frames to desired resolution
+    # -reconnect.           : Enable automatic reconnection on stream interruption
+    # -reconnect_at_eof.    : Reconnect when reaching end of stream (for live streams)
+    # -reconnect_streamed.  : Reconnect on streamed input interruptions
+    # -reconnect_delay_max  : Maximum delay between reconnect attempts
+    # -                     : output to stdout pipe
 
     ffmpeg_cmd = [
         "ffmpeg",
         "-i", config["traffic_cam_url"],
-        "-loglevel", "quiet",            # Suppress ffmpeg output logs for cleaner output
-        "-an",                           # Disable audio processing to save resources
-        "-f", "rawvideo",                # Output raw video frames for processing
-        "-pix_fmt", "bgr24",             # Pixel format compatible with OpenCV
-        "-vf", f"scale={config['width']}:{config['height']}", # Scale frames to desired resolution
-        "-reconnect", "1",               # Enable automatic reconnection on stream interruption
-        "-reconnect_at_eof", "1",        # Reconnect when reaching end of stream (for live streams)
-        "-reconnect_streamed", "1",      # Reconnect on streamed input interruptions
-        "-reconnect_delay_max", "5",     # Maximum delay between reconnect attempts
-        "-"
-    ]
+        "-loglevel", "quiet",
+        "-an",
+        "-f", "rawvideo",
+        "-pix_fmt", "bgr24",
+        "-vf", f"scale={config['width']}:{config['height']}",
+        "-reconnect", "1",
+        "-reconnect_at_eof", "1",
+        "-reconnect_streamed", "1",
+        "-reconnect_delay_max", "5",
+        "-"]
 
-    # Large buffer to reduce frame drops.
+    # Launch the ffmpeg subprocess with a large buffer to reduce dropped frames.
+    # stdout=subprocess.PIPE allows reading raw frames from the process output.
     return subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, bufsize=10**8)
 
 
 def threaded_read(
-        pipe : subprocess.Popen,
-        size : int,
-        result_container : list) -> None:
+    pipe : subprocess.Popen,
+    size : int,
+    result_container : list) -> None:
     """
-    Reads `size` bytes from pipe.stdout in a
-    separate thread and stores it in result_container[0].
-    The read data or exception is appended as the first
-    element to `result_container`.
+    Reads a specified number of bytes from the ffmpeg stdout pipe asynchronously.
 
-    NOTE: Reading from pipe.stdout is blocking;
-    running in a separate thread allows imposing a timeout
-    to detect when ffmpeg hangs or freezes.
+    Because reading from a subprocess pipe is blocking (it waits until bytes
+    are available), this function is intended to run in a separate thread.
+    It reads exactly `size` bytes from pipe.stdout and appends the data or
+    any exception encountered into `result_container`.
 
     Parameters
     ----------
     pipe : subprocess.Popen)
-        The subprocess object with a stdout pipe to read from.
+        The ffmpeg subprocess object whose stdout is being read.
     size : int)
-        The number of bytes to read from pipe.stdout.
+        The number of bytes to read (size of one video frame in bytes).
     result_container : list
-        A list used to store the read bytes or an exception.
-        The read data or exception will be appended as the first element.
+        A shared list to store the read data or exception for later retrieval.
+        This acts as a thread-safe communication mechanism.
 
     Returns
     -------
     None
-        The function stores the result asynchronously in `result_container`.
-        It does not return a value directly.
-
-    Raises
-    ------
-        None directly.
-        Any exception encountered during reading is caught and stored in `result_container`.
+        Does not return; appends the result asynchronously to `result_container`.
     """
     try:
+        # Blocking call: read `size` bytes from ffmpeg stdout.
         data = pipe.stdout.read(size) # type: ignore
+
+        # Append frame bytes to container
         result_container.append(data)
 
     except Exception as e:
-        # Store exception to propagate it later if needed
+        # If an error occurs during reading (e.g. pipe broken),
+        # store the exception in the container for error handling upstream.
         result_container.append(e)
 
 
 def write_frames(
+    frame_callback : Callable[[np.ndarray], None],
     max_retries: int,
     retry_delay: int,
     frame_timeout : int) -> None:
     """
-    Main event loop.
+    Main event loop that captures frames continuously from the video stream.
+
+    This function manages starting and restarting the ffmpeg stream subprocess,
+    reading frames asynchronously with a timeout mechanism, decoding frames
+    into numpy arrays, and passing each frame to a user-supplied callback
+    function (`frame_callback`) for further processing or display.
+
+    It includes robust error handling and exponential backoff retry logic
+    to handle stream interruptions or failures gracefully.
 
     Parameters
     ----------
+    frame_callback : Callable[[np.ndarray], None]
+        A function that accepts a decoded video frame (numpy ndarray)
+        and performs processing or display.
     max_retries : int
-        How many times to retry if there's a failure.
+        Maximum number of retry attempts before giving up.
     retry_delay : int
-        How long to delay after a retry.
+        Initial delay (seconds) before retrying after a failure; delay
+        doubles exponentially on consecutive failures (up to max 60s).
     frame_timeout : int
-        Max time allowed between frames (in seconds).
-
-    Returns
-    -------
-    None
-        Streams video.
+        Timeout (seconds) allowed to read a single frame before
+        assuming the ffmpeg process is frozen or stalled.
     """
     # Load config.
     logger.info("Loading configuration from config.yaml")
     with open("config.yaml", "r") as f:
         config = yaml.safe_load(f)
 
-    # Bytes per frame: width*height*3 color channels.
+    # Calculate the expected number of bytes per raw frame.
+    # width * height * 3 color channels (BGR)
     frame_size = config["width"] * config["height"] * 3
 
     # Count consecutive failures to apply exponential backoff.
     retry_count = 0
 
+    # Outer loop to handle reconnections and retries.
     while True:
-        # Start new ffmpeg process for streaming
-        # This loop handles reconnects/restarts on failure.
         logger.info("Starting new ffmpeg stream process.")
+
+        # Initialize the ffmpeg stream subprocess.
         pipe = initialize_stream(config)
 
         try:
+            # Inner loop reads frames continuously from the ffmpeg stdout pipe.
             while True:
+                # Track time to maintain target FPS.
                 start_time = time.time()
 
-                # Start a thread to read the frame bytes.
+                # Prepare a list container to hold the frame or exceptions.
                 result = []
-                read_thread = threading.Thread(target=threaded_read,
-                                               args=(pipe, frame_size, result))
 
-                # Start a thread to read raw frame bytes asynchronously.
+                # Create and start a thread to read frame bytes asynchronously.
+                read_thread = threading.Thread(
+                    target=threaded_read,
+                    args=(pipe, frame_size, result))
+
                 read_thread.start()
 
-                # Join with timeout to detect freezes/hangs in ffmpeg output.
+                # Join thread with timeout to detect hangs/freezes in ffmpeg output.
                 read_thread.join(timeout=frame_timeout)
 
-                # The read is stuck: no frame received within timeout.
-                # If thread still alive after timeout, ffmpeg is likely frozen.
+                # If thread is still alive after timeout, ffmpeg is likely frozen.
                 if read_thread.is_alive():
                     logger.error("ffmpeg read timed out, stream may be frozen.")
                     raise TimeoutError("ffmpeg read timed out, stream may be frozen.")
 
+                # If no data was read at all, raise an error.
                 if not result:
                     logger.error("No data read from ffmpeg.")
                     raise ValueError("No data read from ffmpeg.")
 
-                # Propagate exceptions from thread
+                # If an exception occurred during the read, propagate it.
                 if isinstance(result[0], Exception):
                     logger.error(f"Exception during ffmpeg read: {result[0]}")
                     raise result[0]
 
+                # Extract raw frame bytes.
                 raw_frame = result[0]
 
+                # Check frame completeness: frame size must match expected size.
                 if len(raw_frame) != frame_size:
                     logger.error("Incomplete frame received. Stream likely interrupted.")
                     raise ValueError("Incomplete frame received. Stream likely interrupted.")
 
-                # Try decoding raw bytes into an image array.
-                # Failures here indicate corrupted or incomplete frames, triggering a reconnect.
                 try:
-                    frame = np.frombuffer(raw_frame, np.uint8)\
+                    # Decode raw bytes into a numpy ndarray shaped (height, width, 3).
+                    # Copy is done to ensure memory safety and mutability.
+                    frame = np.frombuffer(raw_frame, np.uint8) \
                             .reshape((config["height"], config["width"], 3)).copy()
 
-                # Raise to trigger reconnect logic
                 except Exception as e:
+                    # Log and raise any decoding error to trigger reconnect logic.
                     logger.error(f"Error decoding frame: {e}. Restarting stream.")
                     raise
 
-                try:
-                    # Generate a file name.
-                    filename = f"frames/{uuid.uuid4()}.png"
-
-                    # Write the file.
-                    cv2.imwrite(filename, frame)
-
-                    # Delete older excess frames.
-                    files = [os.path.join("frames", f) for f in os.listdir("frames")]
-                    files = [f for f in files if os.path.isfile(f)]
-                    files.sort(key=os.path.getctime, reverse=True)  # newest first
-
-                    for old_file in files[50:]:
-                        try:
-                            os.remove(old_file)
-                        except Exception as e:
-                            print(f"Failed to remove {old_file}: {e}")
-                
-                # Restart stream or shutdown
-                except cv2.error as e:
-                    logger.error(f"OpenCV display error: {e}")
-                    break
-
-                # Reset retry count after a successful frame.
+                # Reset retry count on successful frame capture
                 retry_count = 0
 
-                # Maintain FPS
+                # Maintain target frames per second (FPS) by sleeping the remainder.
                 elapsed = time.time() - start_time
                 frame_time = 1.0 / config["fps"]
                 sleep_time = max(0.001, frame_time - elapsed)
                 time.sleep(sleep_time)
 
-        # Exit on keyboard interrupt.
+                # Pass the decoded frame to the provided callback function
+                # for processing or display (non-blocking, user-defined).
+                frame_callback(frame)
+
+        # Graceful exit on user interrupt (Ctrl+C).
         except KeyboardInterrupt:
             logger.info("User requested exit")
             break
 
-        # Keep trying to reconnect.
+        # Log unexpected errors and attempt to reconnect.
         except Exception as e:
             logger.error(f"Error: {e}. Attempting to reconnect...")
 
-        # Cleanup: close pipe stdout, terminate ffmpeg process cleanly
-        # and if it doesn't terminate in time, kill it forcefully.
+        # Cleanup resources: terminate ffmpeg subprocess and close pipes.
         finally:
+            # Process is still running.
             if pipe.poll() is None:
                 try:
-                    pipe.stdout.close()  # type: ignore
-
+                    # Close stdout pipe safely.
+                    pipe.stdout.close() # type: ignore
                 except Exception as close_exc:
                     logger.warning(f"Exception when closing pipe stdout: {close_exc}")
 
+                # Request subprocess termination.
                 pipe.terminate()
 
                 try:
+                    # Wait for clean exit.
                     pipe.wait(timeout=5)
 
                 except subprocess.TimeoutExpired:
+                    # If termination hangs, kill forcefully.
                     logger.warning("Terminate timeout expired, killing process.")
                     pipe.kill()
                     pipe.wait()
 
+            # Increment retry count after each failure/reconnect attempt.
             retry_count += 1
 
+            # If maximum retries reached, exit the loop and program.
             if retry_count >= max_retries:
                 logger.error("Max retries reached. Exiting.")
                 break
 
-            # Exponential backoff with cap at 60 seconds to prevent
-            # excessively long delays between retry attempts.
+            # Compute exponential backoff delay before retrying connection,
+            # capped at 60 seconds to avoid long delays.
             wait_time = min(retry_delay * (2 ** (retry_count - 1)), 60)
 
             logger.info(f"Waiting {wait_time} seconds before retry...")
             time.sleep(wait_time)
-
-    # Close all OpenCV windows on program exit.
-    logger.info("Destroying all OpenCV windows and exiting.")
-    cv2.destroyAllWindows()
-
-
-
-if __name__ == "__main__":
-
-    # Give access to the display.
-    os.environ["DISPLAY"] = ":0"
-
-    # Log beginning.
-    logger.info("Starting CCTV Stream program")
-
-    # Get frames from CCTV stream and write them.
-    write_frames(
-        max_retries=10000,
-        retry_delay=3,
-        frame_timeout=5)

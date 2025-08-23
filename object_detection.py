@@ -13,11 +13,12 @@ with open("config.yaml", "r") as f:
 MODEL = YOLO(config["yolo_model"])
 
 
-def draw_bbs(frame : np.ndarray,
-             target_classes : list,
-             bb_color : tuple,
-             draw_labels : bool,
-             conf_threshold : float):
+def draw_bbs(
+    frame : np.ndarray,
+    target_classes : list,
+    bb_color : tuple,
+    draw_labels : bool,
+    conf_threshold : float):
     """
     Draw bounding boxes around detected objects using YOLOv8.
 
