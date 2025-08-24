@@ -16,8 +16,20 @@ camera_cycle_time: 60
 # Add as many or as few cameras to this list as you want. See `all_cameras.txt`
 traffic_cam_urls:
   - https://61e0c5d388c2e.streamlock.net/live/3_Stewart_NS.stream/chunklist_w1559207018.m3u8
-  - https://61e0c5d388c2e.streamlock.net/live/Aurora_N_145_EW.stream/chunklist_w48234066.m3u8 
+  - https://61e0c5d388c2e.streamlock.net/live/Aurora_N_145_EW.stream/chunklist_w48234066.m3u8
   - https://61e0c5d388c2e.streamlock.net/live/LCW_NE_137_NS.stream/chunklist_w1826072949.m3u8
   - https://61e0c5d388c2e.streamlock.net/live/Greenwood_N_125_EW.stream/chunklist_w126395193.m3u8
   - https://61e0c5d388c2e.streamlock.net/live/LCW_NE_125_EW.stream/chunklist_w929818080.m3u8
-  # - https://61e0c5d388c2e.streamlock.net/live/Aurora_N_117_NS.stream/chunklist_w1723281647.m3u8
+  - https://61e0c5d388c2e.streamlock.net/live/Aurora_N_117_NS.stream/chunklist_w1723281647.m3u8
+  - https://61e0c5d388c2e.streamlock.net/live/Greenwood_N_117_NS.stream/chunklist_w1548803713.m3u8
+  - https://61e0c5d388c2e.streamlock.net/live/5_NE_Northgate_EW.stream/chunklist_w424015717.m3u8
+  - https://61e0c5d388c2e.streamlock.net/live/15_NW_85_NS.stream/chunklist_w16466529.m3u8
+  - https://61e0c5d388c2e.streamlock.net/live/LCW_NE_16_NS.stream/chunklist_w1409052035.m3u8
+  - https://61e0c5d388c2e.streamlock.net/live/Aurora_N_Winona_NS.stream/chunklist_w770105933.m3u8
+  - https://61e0c5d388c2e.streamlock.net/live/15_NE_75_NS.stream/chunklist_w356193444.m3u8
+  - https://61e0c5d388c2e.streamlock.net/live/15_NW_65_NS.stream/chunklist_w1400035675.m3u8
+  - https://61e0c5d388c2e.streamlock.net/live/18_NE_65_SEC.stream/chunklist_w2098631728.m3u8
+  - https://61e0c5d388c2e.streamlock.net/live/25_NE_66_NS.stream/chunklist_w1582562889.m3u8
+  - https://61e0c5d388c2e.streamlock.net/live/32_NE_65_EW.stream/chunklist_w385177893.m3u8
+  - https://61e0c5d388c2e.streamlock.net/live/24_NW_Market_EW.stream/chunklist_w2135353898.m3u8
+  - https://61e0c5d388c2e.streamlock.net/live/Greenlake_N_50_NS.stream/chunklist_w594511983.m3u8
