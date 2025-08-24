@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+import random
 import subprocess
 import time
 from typing import Callable
@@ -53,9 +54,12 @@ def initialize_stream(config : dict) -> subprocess.Popen:
     # -reconnect_delay_max  : Maximum delay between reconnect attempts
     # -                     : output to stdout pipe
 
+    # If more than one camera is provided, choose one randomly.
+    # traffic_cam_url = random.choice(config["traffic_cam_url"])
+
     ffmpeg_cmd = [
         "ffmpeg",
-        "-i", config["traffic_cam_url"],
+        "-i", config["traffic_cam_url"][1],
         "-loglevel", "quiet",
         "-an",
         "-f", "rawvideo",
