@@ -312,15 +312,14 @@ def write_frames(
 
     retry_count = 0
 
-    # Track hash of frames to see if frames are actually changing.
-    last_frame_hash = None
-    last_hash_change_time = time.time()
-
     while True:
-        logger.info("Starting VLC stream (headless)")
-
-        # Select a camera at random.
+        # Select a camera at random at every retry.
         traffic_cam_url = random.choice(config["traffic_cam_urls"])
+        logger.info(f"  Streaming : {traffic_cam_url}")
+
+        # Reset hash check state for each new stream.
+        last_frame_hash = None
+        last_hash_change_time = time.time()
 
         # Start the frame grabber.
         grabber = VLCFrameGrabber(traffic_cam_url, config["width"], config["height"])
@@ -332,19 +331,31 @@ def write_frames(
 
         try:
             while True:
+                # Select a new camera if enough time has elapsed.
+                if time.time() - camera_start_time > config["camera_cycle_time"]:
+                    logger.info("Switching to a new camera.")
+                    break
+
                 frame = grabber.get_current_frame()
 
                 # Pass the current frame to the user-provided callback.
                 if frame is not None:
                     frame_callback(frame)
 
-                    # Compute hash of the current frame
+                    # Compute hash of the current frame.
                     current_hash = hashlib.md5(frame.tobytes()).hexdigest()
 
-                    # Check if frame content has changed
+                    # Check if frame content has changed.
                     if current_hash != last_frame_hash:
+                        logger.debug(f"Frame hash changed: {current_hash}")
                         last_frame_hash = current_hash
                         last_hash_change_time = time.time()
+
+                    else:
+                        logger.debug(f"Frame hash unchanged: {current_hash}")
+
+                    # Reset retry count on successful frame.
+                    retry_count = 0
 
                 # Check if VLC is in a dead/stuck state.
                 if grabber.is_playback_stuck():
@@ -361,33 +372,36 @@ def write_frames(
 
                 # Check if frame content hasn't changed for too long
                 frame_hash_age = time.time() - last_hash_change_time
-                if frame_hash_age > 5:  # or your preferred timeout
+                if frame_hash_age > 5:
                     raise TimeoutError(f"Frame content has not changed in {frame_hash_age:.2f}s — stream likely frozen.")
-
-                # Select a new camera if enough time has elapsed.
-                if time.time() - camera_start_time > config["camera_cycle_time"]:
-                    logger.info("Switching to a new camera.")
-                    break
-
-                # Reset retry count after successful frame processing.
-                retry_count = 0
 
                 # Small sleep to reduce CPU usage without impacting frame rate.
                 time.sleep(0.01)
 
-        except TimeoutError as e:
-            logger.warning(f"Timeout: {e}")
+        except (TimeoutError, RuntimeError) as e:
+            logger.warning(f"Stream error detected: {e}")
+            retry_count += 1
+
+            # Stop the current media player before retrying
+            grabber.stop()
+
+            # Break the inner loop to select a new camera URL immediately
+            continue
+
         except KeyboardInterrupt:
             logger.info("User interrupted. Exiting.")
-            break
+            grabber.stop()
+            # Exit function cleanly.
+            return
+
         except Exception as e:
             logger.error(f"Unexpected error: {e}")
+            grabber.stop()
+            break
 
         # Stop the current media player before retrying or exiting.
         finally:
             grabber.stop()
-
-        retry_count += 1
 
         # If max retries exceeded, exit the loop.
         if retry_count >= max_retries:

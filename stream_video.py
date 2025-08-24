@@ -68,7 +68,7 @@ def start_writer(
     # This function will capture frames and invoke frame_callback for each frame.
     write_frames(
         frame_callback=frame_callback,
-        max_retries=10000,
+        max_retries=2,
         retry_delay=3,
         frame_timeout=5)
 
