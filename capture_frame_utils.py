@@ -1,279 +1,400 @@
+import ctypes
+import hashlib
+import random
+import time
+import threading
 import logging
 import numpy as np
-import random
-import subprocess
-import time
-from typing import Callable
 import yaml
-import threading
+import vlc  # type: ignore
+from typing import Callable
 
 
 
-# Configure logger.
+# Configure logging: INFO level with timestamps and message levels.
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S')
+    format='[%(asctime)s] %(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
+# Define VLC callback function types using ctypes for video frame handling
+LOCK_CALLBACK = ctypes.CFUNCTYPE(
+    ctypes.c_void_p, ctypes.c_void_p,
+    ctypes.POINTER(ctypes.c_void_p))
+UNLOCK_CALLBACK = ctypes.CFUNCTYPE(
+    None,
+    ctypes.c_void_p,
+    ctypes.c_void_p,
+    ctypes.POINTER(ctypes.c_void_p))
+DISPLAY_CALLBACK = ctypes.CFUNCTYPE(
+    None,
+    ctypes.c_void_p,
+    ctypes.c_void_p)
 
-def initialize_stream(config : dict) -> subprocess.Popen:
+
+class VLCFrameGrabber:
     """
-    Initialize and start an FFMPEG subprocess to stream video from a URL.
-
-    This function constructs the ffmpeg command line using parameters
-    from the `config` dictionary. The process outputs raw video frames
-    directly to its stdout pipe, enabling frame-by-frame reading.
-
-    Parameters
-    ----------
-    config : dict
-        Configuration dictionary with keys:
-            - "traffic_cam_url" (str): URL of the video stream.
-            - "width" (int): Desired output frame width.
-            - "height" (int): Desired output frame height.
-
-    Returns
-    -------
-    subprocess.Popen
-        A subprocess object representing the running FFMPEG process,
-        with stdout set to a pipe for raw video frames.
+    Handles VLC video streaming and frame extraction using VLC's video callbacks.
+    Frames are grabbed in RV24 format (3 bytes per pixel, BGR), converted to RGB.
     """
-    logger.info("Initializing ffmpeg stream subprocess.")
+    def __init__(
+        self,
+        url : str,
+        width : int,
+        height : int) -> None:
+        """
+        Initializes the VLC instance, media player, and video callbacks.
+        
+        Parameters
+        ----------
+        url : str
+            Video stream URL.
+        width : int
+            Frame width in pixels.
+        height : int
+            Frame height in pixels.
 
-    # Build ffmpeg command arguments list:
-    # -i <input>            : input stream URL
-    # -loglevel quiet       : suppress ffmpeg console output for clarity
-    # -an                   : disable audio to save processing
-    # -f rawvideo           : output raw frames, no container format
-    # -pix_fmt bgr24        : pixel format compatible with OpenCV (BGR color)
-    # -vf scale WxH         : resize frames to desired resolution
-    # -reconnect.           : Enable automatic reconnection on stream interruption
-    # -reconnect_at_eof.    : Reconnect when reaching end of stream (for live streams)
-    # -reconnect_streamed.  : Reconnect on streamed input interruptions
-    # -reconnect_delay_max  : Maximum delay between reconnect attempts
-    # -                     : output to stdout pipe
+        Returns
+        -------
+        None
+        """
+        self.url = url
+        self.width = width
+        self.height = height
 
-    # If more than one camera is provided, choose one randomly.
-    # traffic_cam_url = random.choice(config["traffic_cam_url"])
+        # Calculate frame buffer size for RV24 format (3 bytes per pixel).
+        self.frame_size = width * height * 3
 
-    ffmpeg_cmd = [
-        "ffmpeg",
-        "-i", config["traffic_cam_url"][1],
-        "-loglevel", "quiet",
-        "-an",
-        "-f", "rawvideo",
-        "-pix_fmt", "bgr24",
-        "-vf", f"scale={config['width']}:{config['height']}",
-        "-reconnect", "1",
-        "-reconnect_at_eof", "1",
-        "-reconnect_streamed", "1",
-        "-reconnect_delay_max", "5",
-        "-"]
+        # Allocate a ctypes array buffer for raw frame data.
+        self.frame_buffer = (ctypes.c_ubyte * self.frame_size)()
 
-    # Launch the ffmpeg subprocess with a large buffer to reduce dropped frames.
-    # stdout=subprocess.PIPE allows reading raw frames from the process output.
-    return subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, bufsize=10**8)
+        # Store the latest frame as a NumPy array.
+        self.current_frame = None
+
+        # Threading lock to safely share frame data between VLC callbacks and main thread.
+        self.lock = threading.Lock()
+
+        # Timestamp of the last frame update, used to detect stale frames.
+        self.last_update_time = time.time()
+
+        # Initialize VLC instance and create a new media player.
+        self.vlc_instance = vlc.Instance()
+        self.mediaplayer = self.vlc_instance.media_player_new()
+
+        # Set the video format to RV24 (3 bytes per pixel, BGR).
+        # pitch = width * 3 bytes per row.
+        self.mediaplayer.video_set_format("RV24", width, height, width * 3)
+
+        # Create VLC video callbacks with ctypes.
+        self.lock_cb = LOCK_CALLBACK(self.lock_callback)
+        self.unlock_cb = UNLOCK_CALLBACK(self.unlock_callback)
+        self.display_cb = DISPLAY_CALLBACK(self.display_callback)
+
+        # Register the video callbacks with VLC.
+        self.mediaplayer.video_set_callbacks(self.lock_cb, self.unlock_cb, self.display_cb, None)
+
+        # Flag to detect VLC internal errors during playback
+        self.error_occurred = False
+
+        # Attach VLC event listener to catch internal player errors.
+        event_manager = self.mediaplayer.event_manager()
+        event_manager.event_attach(vlc.EventType.MediaPlayerEncounteredError, self.on_vlc_error)
 
 
-def threaded_read(
-    pipe : subprocess.Popen,
-    size : int,
-    result_container : list) -> None:
-    """
-    Reads a specified number of bytes from the ffmpeg stdout pipe asynchronously.
+    def on_vlc_error(
+        self,
+        _event: vlc.Event) -> None:
+        """
+        VLC event callback triggered on internal player errors.
+        Sets error flag to inform main loop to restart stream.
 
-    Because reading from a subprocess pipe is blocking (it waits until bytes
-    are available), this function is intended to run in a separate thread.
-    It reads exactly `size` bytes from pipe.stdout and appends the data or
-    any exception encountered into `result_container`.
+        Parameters
+        ----------
+        _event : vlc.Event
+            VLC event object (not used).
 
-    Parameters
-    ----------
-    pipe : subprocess.Popen)
-        The ffmpeg subprocess object whose stdout is being read.
-    size : int)
-        The number of bytes to read (size of one video frame in bytes).
-    result_container : list
-        A shared list to store the read data or exception for later retrieval.
-        This acts as a thread-safe communication mechanism.
+        Returns
+        -------
+        None
+        """
+        logger.error("VLC encountered an error, restarting stream.")
+        self.error_occurred = True
 
-    Returns
-    -------
-    None
-        Does not return; appends the result asynchronously to `result_container`.
-    """
-    try:
-        # Blocking call: read `size` bytes from ffmpeg stdout.
-        data = pipe.stdout.read(size) # type: ignore
 
-        # Append frame bytes to container
-        result_container.append(data)
+    def start(self) -> None:
+        """
+        Starts playback of the media stream.
 
-    except Exception as e:
-        # If an error occurs during reading (e.g. pipe broken),
-        # store the exception in the container for error handling upstream.
-        result_container.append(e)
+        This initializes a VLC media object with the provided URL and begins
+        streaming. The media player is expected to invoke the registered video
+        callbacks as frames become available.
+
+        Returns
+        -------
+        None
+        """
+        media = self.vlc_instance.media_new(self.url)
+        self.mediaplayer.set_media(media)
+        self.mediaplayer.play()
+
+    def stop(self) -> None:
+        """
+        Stops playback of the media stream.
+
+        This halts the VLC media player's playback. Useful for cleanup or
+        restarting the stream in the event of an error.
+
+        Returns
+        -------
+        None
+        """
+        self.mediaplayer.stop()
+
+
+    def lock_callback(
+        self,
+        _opaque : ctypes.c_void_p, 
+        planes : ctypes.POINTER(ctypes.c_void_p)):  # type: ignore
+        """
+        VLC calls this before rendering a new frame to lock the video buffer.
+        Provides VLC with a pointer to the pre-allocated frame buffer.
+
+        Parameters
+        ----------
+        opaque : ctypes.c_void_p
+            User data pointer (unused).
+        planes : ctypes.POINTER(ctypes.c_void_p)
+            Pointer to an array where the address of the video buffer will be stored.
+
+        Returns
+        -------
+        int
+            Integer address of the locked video buffer.
+        """
+        ptr = ctypes.cast(self.frame_buffer, ctypes.c_void_p)
+        planes[0] = ptr
+        return ptr.value
+
+
+    def unlock_callback(
+        self,
+        _opaque: ctypes.c_void_p,
+        _picture: ctypes.c_void_p,
+        _planes: ctypes.POINTER((ctypes.c_void_p))) -> None:  # type: ignore
+        """
+        VLC calls this after rendering a frame to unlock the video buffer.
+        No action needed here as we handle frame processing in display callback.
+
+        Parameters
+        ----------
+        _opaque : ctypes.c_void_p
+            User data pointer (not used).
+        _picture : ctypes.c_void_p
+            Pointer to picture data (not used).
+        _planes : ctypes.POINTER(ctypes.c_void_p)
+            Array of pointers to video planes (not used).
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+
+    def display_callback(
+        self,
+        _opaque: ctypes.c_void_p,
+        _picture: ctypes.c_void_p) -> None:
+        """
+        VLC calls this when a frame is ready to be displayed.
+        Copies frame data from the buffer, converts BGR to RGB, and stores it.
+
+        Parameters
+        ----------
+        _opaque : ctypes.c_void_p
+            User data pointer (not used).
+        _picture : ctypes.c_void_p
+            Pointer to picture data (not used).
+
+        Returns
+        -------
+        None
+        """
+        with self.lock:
+            # Convert raw ctypes buffer to numpy array (BGR format).
+            frame = np.ctypeslib.as_array(self.frame_buffer)
+
+            # Shape as (H, W, 3 channels).
+            frame = frame.reshape((self.height, self.width, 3))
+
+            # Convert BGR to RGB by reversing last dimension.
+            rgb_frame = frame[:, :, ::-1].copy()
+
+            #  Store the current frame safely for access by other threads.
+            self.current_frame = rgb_frame
+
+            # Update timestamp for last successful frame reception.
+            self.last_update_time = time.time()
+
+
+    def get_current_frame(self) -> np.ndarray | None:
+        """
+        Returns a copy of the latest frame as a NumPy array.
+
+        Returns
+        -------
+        np.ndarray
+            The current frame in RGB format.
+        None
+            If no frame available.
+        """
+        with self.lock:
+            if self.current_frame is None:
+                return None
+            return self.current_frame.copy()
+
+
+    def get_last_update_time(self) -> float:
+        """
+        Returns the timestamp of the last frame update.
+
+        Returns
+        -------
+        float
+            Unix timestamp of the last frame reception.
+        """
+        with self.lock:
+            return self.last_update_time
+
+
+    def is_playback_stuck(self) -> bool:
+        """
+        Checks if VLC is in an invalid or stalled playback state.
+
+        Returns
+        -------
+        bool
+            True if VLC playback is ended, stopped, or in error state,
+            indicating it is stuck.
+            False otherwise.
+        """
+        state = self.mediaplayer.get_state()
+        if state in [vlc.State.Ended, vlc.State.Stopped, vlc.State.Error]:
+            logger.warning(f"VLC entered invalid playback state: {state}")
+            return True
+
+        return False
 
 
 def write_frames(
-    frame_callback : Callable[[np.ndarray], None],
+    frame_callback: Callable[[np.ndarray], None],
     max_retries: int,
     retry_delay: int,
-    frame_timeout : int) -> None:
+    frame_timeout: int) -> None:
     """
-    Main event loop that captures frames continuously from the video stream.
-
-    This function manages starting and restarting the ffmpeg stream subprocess,
-    reading frames asynchronously with a timeout mechanism, decoding frames
-    into numpy arrays, and passing each frame to a user-supplied callback
-    function (`frame_callback`) for further processing or display.
-
-    It includes robust error handling and exponential backoff retry logic
-    to handle stream interruptions or failures gracefully.
+    Main function to initialize the stream, grab frames, handle errors,
+    and call a user-defined callback on each new frame.
 
     Parameters
     ----------
     frame_callback : Callable[[np.ndarray], None]
-        A function that accepts a decoded video frame (numpy ndarray)
-        and performs processing or display.
+        Function that processes frames; takes an RGB np.ndarray.
     max_retries : int
-        Maximum number of retry attempts before giving up.
+        Number of retries allowed before giving up.
     retry_delay : int
-        Initial delay (seconds) before retrying after a failure; delay
-        doubles exponentially on consecutive failures (up to max 60s).
+        Delay in seconds before retrying after failure.
     frame_timeout : int
-        Timeout (seconds) allowed to read a single frame before
-        assuming the ffmpeg process is frozen or stalled.
+        Time in seconds to wait before considering the stream stalled.
     """
-    # Load config.
-    logger.info("Loading configuration from config.yaml")
+    logger.info("Loading config from config.yaml")
     with open("config.yaml", "r") as f:
         config = yaml.safe_load(f)
 
-    # Calculate the expected number of bytes per raw frame.
-    # width * height * 3 color channels (BGR)
-    frame_size = config["width"] * config["height"] * 3
-
-    # Count consecutive failures to apply exponential backoff.
     retry_count = 0
 
-    # Outer loop to handle reconnections and retries.
-    while True:
-        logger.info("Starting new ffmpeg stream process.")
+    # Track hash of frames to see if frames are actually changing.
+    last_frame_hash = None
+    last_hash_change_time = time.time()
 
-        # Initialize the ffmpeg stream subprocess.
-        pipe = initialize_stream(config)
+    while True:
+        logger.info("Starting VLC stream (headless)")
+
+        # Select a camera at random.
+        traffic_cam_url = random.choice(config["traffic_cam_urls"])
+
+        # Start the frame grabber.
+        grabber = VLCFrameGrabber(traffic_cam_url, config["width"], config["height"])
+        grabber.error_occurred = False
+        grabber.start()
+
+        # Track when this camera was chosen
+        camera_start_time = time.time()
 
         try:
-            # Inner loop reads frames continuously from the ffmpeg stdout pipe.
             while True:
-                # Track time to maintain target FPS.
-                start_time = time.time()
+                frame = grabber.get_current_frame()
 
-                # Prepare a list container to hold the frame or exceptions.
-                result = []
+                # Pass the current frame to the user-provided callback.
+                if frame is not None:
+                    frame_callback(frame)
 
-                # Create and start a thread to read frame bytes asynchronously.
-                read_thread = threading.Thread(
-                    target=threaded_read,
-                    args=(pipe, frame_size, result))
+                    # Compute hash of the current frame
+                    current_hash = hashlib.md5(frame.tobytes()).hexdigest()
 
-                read_thread.start()
+                    # Check if frame content has changed
+                    if current_hash != last_frame_hash:
+                        last_frame_hash = current_hash
+                        last_hash_change_time = time.time()
 
-                # Join thread with timeout to detect hangs/freezes in ffmpeg output.
-                read_thread.join(timeout=frame_timeout)
+                # Check if VLC is in a dead/stuck state.
+                if grabber.is_playback_stuck():
+                    raise RuntimeError("VLC playback is stuck or ended.")
 
-                # If thread is still alive after timeout, ffmpeg is likely frozen.
-                if read_thread.is_alive():
-                    logger.error("ffmpeg read timed out, stream may be frozen.")
-                    raise TimeoutError("ffmpeg read timed out, stream may be frozen.")
+                # Check for VLC internal errors signaled via event callback
+                if grabber.error_occurred:
+                    raise RuntimeError("VLC internal error detected.")
 
-                # If no data was read at all, raise an error.
-                if not result:
-                    logger.error("No data read from ffmpeg.")
-                    raise ValueError("No data read from ffmpeg.")
+                # Check if frames are coming regularly; if not, consider stream stalled.
+                last_frame_age = time.time() - grabber.get_last_update_time()
+                if last_frame_age > frame_timeout:
+                    raise TimeoutError(f"No new frame received in {last_frame_age:.2f}s — stream stalled.")
 
-                # If an exception occurred during the read, propagate it.
-                if isinstance(result[0], Exception):
-                    logger.error(f"Exception during ffmpeg read: {result[0]}")
-                    raise result[0]
+                # Check if frame content hasn't changed for too long
+                frame_hash_age = time.time() - last_hash_change_time
+                if frame_hash_age > 5:  # or your preferred timeout
+                    raise TimeoutError(f"Frame content has not changed in {frame_hash_age:.2f}s — stream likely frozen.")
 
-                # Extract raw frame bytes.
-                raw_frame = result[0]
+                # Select a new camera if enough time has elapsed.
+                if time.time() - camera_start_time > config["camera_cycle_time"]:
+                    logger.info("Switching to a new camera.")
+                    break
 
-                # Check frame completeness: frame size must match expected size.
-                if len(raw_frame) != frame_size:
-                    logger.error("Incomplete frame received. Stream likely interrupted.")
-                    raise ValueError("Incomplete frame received. Stream likely interrupted.")
-
-                try:
-                    # Decode raw bytes into a numpy ndarray shaped (height, width, 3).
-                    # Copy is done to ensure memory safety and mutability.
-                    frame = np.frombuffer(raw_frame, np.uint8) \
-                            .reshape((config["height"], config["width"], 3)).copy()
-
-                except Exception as e:
-                    # Log and raise any decoding error to trigger reconnect logic.
-                    logger.error(f"Error decoding frame: {e}. Restarting stream.")
-                    raise
-
-                # Reset retry count on successful frame capture
+                # Reset retry count after successful frame processing.
                 retry_count = 0
 
-                # Maintain target frames per second (FPS) by sleeping the remainder.
-                elapsed = time.time() - start_time
-                frame_time = 1.0 / config["fps"]
-                sleep_time = max(0.001, frame_time - elapsed)
-                time.sleep(sleep_time)
+                # Small sleep to reduce CPU usage without impacting frame rate.
+                time.sleep(0.01)
 
-                # Pass the decoded frame to the provided callback function
-                # for processing or display (non-blocking, user-defined).
-                frame_callback(frame)
-
-        # Graceful exit on user interrupt (Ctrl+C).
+        except TimeoutError as e:
+            logger.warning(f"Timeout: {e}")
         except KeyboardInterrupt:
-            logger.info("User requested exit")
+            logger.info("User interrupted. Exiting.")
+            break
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}")
+
+        # Stop the current media player before retrying or exiting.
+        finally:
+            grabber.stop()
+
+        retry_count += 1
+
+        # If max retries exceeded, exit the loop.
+        if retry_count >= max_retries:
+            logger.error("Max retries reached. Exiting.")
             break
 
-        # Log unexpected errors and attempt to reconnect.
-        except Exception as e:
-            logger.error(f"Error: {e}. Attempting to reconnect...")
-
-        # Cleanup resources: terminate ffmpeg subprocess and close pipes.
-        finally:
-            # Process is still running.
-            if pipe.poll() is None:
-                try:
-                    # Close stdout pipe safely.
-                    pipe.stdout.close() # type: ignore
-                except Exception as close_exc:
-                    logger.warning(f"Exception when closing pipe stdout: {close_exc}")
-
-                # Request subprocess termination.
-                pipe.terminate()
-
-                try:
-                    # Wait for clean exit.
-                    pipe.wait(timeout=5)
-
-                except subprocess.TimeoutExpired:
-                    # If termination hangs, kill forcefully.
-                    logger.warning("Terminate timeout expired, killing process.")
-                    pipe.kill()
-                    pipe.wait()
-
-            # Increment retry count after each failure/reconnect attempt.
-            retry_count += 1
-
-            # If maximum retries reached, exit the loop and program.
-            if retry_count >= max_retries:
-                logger.error("Max retries reached. Exiting.")
-                break
-
-            # Compute exponential backoff delay before retrying connection,
-            # capped at 60 seconds to avoid long delays.
-            wait_time = min(retry_delay * (2 ** (retry_count - 1)), 60)
-
-            logger.info(f"Waiting {wait_time} seconds before retry...")
-            time.sleep(wait_time)
+        # Exponential backoff with max wait time of 60 seconds before retry
+        wait_time = min(retry_delay * (2 ** (retry_count - 1)), 60)
+        logger.info(f"Retrying in {wait_time:.1f} seconds...")
+        time.sleep(wait_time)

@@ -35,3 +35,10 @@ Clear logs:
 
 - `sudo journalctl --unit=display.service --rotate`
 - `sudo journalctl --vacuum-time=1s`
+
+
+## Current status
+
+- works on MacOS with little latency and without crashing (1 hr test)
+- requires additional testing on ubuntu and raspbian
+- requires better logging.

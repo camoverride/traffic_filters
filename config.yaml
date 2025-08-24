@@ -5,14 +5,16 @@ bb_color: [0, 255, 0]
 draw_labels: True
 conf_threshold: 0.1
 
-# Traffic camera stream information.
-fps: 15
+# Size of display window.
 width: 1280
 height: 720
-cycle_time_secs: 60 # If multipe cameras are available.
 
-# Uncomment to enable switching between cameras. See more cameras in `all_cameras.txt`
-traffic_cam_url:
+# How often to change which camera is being displayed.
+# Set to a very large number like 999999999999999 to never [rarely] change.
+camera_cycle_time: 60
+
+# Add as many or as few cameras to this list as you want. See `all_cameras.txt`
+traffic_cam_urls:
   - https://61e0c5d388c2e.streamlock.net/live/3_Stewart_NS.stream/chunklist_w1559207018.m3u8
   - https://61e0c5d388c2e.streamlock.net/live/Aurora_N_145_EW.stream/chunklist_w48234066.m3u8 
   - https://61e0c5d388c2e.streamlock.net/live/LCW_NE_137_NS.stream/chunklist_w1826072949.m3u8

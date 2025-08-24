@@ -42,7 +42,9 @@ def display_frames(
     cv2.waitKey(100)
 
     # Now set fullscreen.
-    cv2.setWindowProperty("CCTV Footage", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    cv2.setWindowProperty("CCTV Footage", 
+                          cv2.WND_PROP_FULLSCREEN, 
+                          cv2.WINDOW_FULLSCREEN)
 
     while True:
         try:

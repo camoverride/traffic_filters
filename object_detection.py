@@ -1,7 +1,7 @@
-import cv2
+import cv2  # type: ignore
 import numpy as np
 import yaml
-from ultralytics import YOLO
+from ultralytics import YOLO  # type: ignore
 
 
 
